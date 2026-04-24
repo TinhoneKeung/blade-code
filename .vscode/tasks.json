@@ -1,0 +1,46 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Blade Dev",
+      "type": "shell",
+      "command": "bun --hot --inspect src/blade.tsx",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/cli"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "zsh",
+      "type": "shell",
+      "command": "bun --inspect-wait=127.0.0.1:6499/blade src/blade.tsx",
+      "options": {
+        "cwd": "${workspaceFolder}/packages/cli"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "isBackground": true,
+      "problemMatcher": [
+        {
+          "pattern": {
+            "regexp": "^_never_match$"
+          },
+          "background": {
+            "activeOnStart": true,
+            "beginsPattern": ".",
+            "endsPattern": "inspector"
+          }
+        }
+      ]
+    }
+  ]
+}

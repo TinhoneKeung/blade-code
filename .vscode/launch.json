@@ -1,0 +1,74 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CLI (Bun)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["--hot", "src/blade.tsx"],
+      "cwd": "${workspaceFolder}/packages/cli",
+      "console": "integratedTerminal",
+      "stopOnEntry": false
+    },
+    {
+      "name": "CLI with Args (Bun)",
+      "type": "bun",
+      "request": "launch",
+      "program": "${workspaceFolder}/packages/cli/src/blade.tsx",
+      "cwd": "${workspaceFolder}/packages/cli",
+      "args": [],
+      "stopOnEntry": false,
+      "watchMode": false
+    },
+    {
+      "name": "zsh2",
+      "type": "bun",
+      "request": "attach",
+      "url": "ws://127.0.0.1:6499/blade",
+      "stopOnEntry": false,
+      "preLaunchTask": "zsh"
+    },
+    {
+      "name": "Tests (Vitest)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "run",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.config.ts",
+        "--no-file-parallelism"
+      ],
+      "cwd": "${workspaceFolder}/packages/cli",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "Current Test File (Vitest)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "run",
+        "vitest",
+        "run",
+        "--config",
+        "vitest.config.ts",
+        "--no-file-parallelism",
+        "${relativeFile}"
+      ],
+      "cwd": "${workspaceFolder}/packages/cli",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    }
+  ]
+}

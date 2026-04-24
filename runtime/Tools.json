@@ -1,0 +1,574 @@
+[
+    {
+        "name": "Read",
+        "description": "Read files from the local filesystem\n\nReads a file from the local filesystem. You can access any file directly by using this tool. Assume this tool is able to read all files on the machine. If the User provides a path to a file assume that path is valid. It is okay to read a file that does not exist; an error will be returned.\n\nUsage Notes:\n- The file_path parameter must be an absolute path, not a relative path\n- By default, it reads up to 2000 lines starting from the beginning of the file\n- You can optionally specify a line offset and limit (especially handy for long files), but it's recommended to read the whole file by not providing these parameters\n- Any lines longer than 2000 characters will be truncated\n- Results are returned using cat -n format, with line numbers starting at 1\n- This tool allows reading images (eg PNG, JPG, etc). When reading an image file the contents are presented visually as this is a multimodal LLM.\n- This tool can read PDF files (.pdf). PDFs are processed page by page, extracting both text and visual content for analysis.\n- This tool can read Jupyter notebooks (.ipynb files) and returns all cells with their outputs, combining code, text, and visualizations.\n- This tool can only read files, not directories. To read a directory, use an ls command via the Bash tool.\n- You can call multiple tools in a single response. It is always better to speculatively read multiple potentially useful files in parallel.\n- You will regularly be asked to read screenshots. If the user provides a path to a screenshot, ALWAYS use this tool to view the file at the path. This tool will work with all temporary file paths.\n- If you read a file that exists but has empty contents you will receive a system reminder warning in place of file contents.\n\nImportant:\n[WARN] file_path must be absolute\n[WARN] Prefer reading the entire file (omit offset and limit)\n[WARN] Use offset/limit only for very large files\n[WARN] Line numbers start at 1 (cat -n format)",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "File path to read (must be absolute)"
+                },
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Starting line number (0-based, text files only)"
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10000,
+                    "description": "Number of lines to read (text files only)"
+                },
+                "encoding": {
+                    "type": "string",
+                    "enum": [
+                        "utf8",
+                        "base64",
+                        "binary"
+                    ],
+                    "default": "utf8",
+                    "description": "File encoding"
+                }
+            },
+            "required": [
+                "file_path"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "Edit",
+        "description": "Performs exact string replacements in files\n\nPerforms exact string replacements in files.\n\nUsage Notes:\n- You must use your Read tool at least once in the conversation before editing. This tool will error if you attempt an edit without reading the file.\n- When editing text from Read tool output, ensure you preserve the exact indentation (tabs/spaces) as it appears AFTER the line number prefix. The line number prefix format is: spaces + line number + tab. Everything after that tab is the actual file content to match. Never include any part of the line number prefix in the old_string or new_string.\n- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.\n- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.\n- The edit will FAIL if old_string is not unique in the file. Either provide a larger string with more surrounding context to make it unique or use replace_all to change every instance of old_string.\n- Use replace_all for replacing and renaming strings across the file. This parameter is useful if you want to rename a variable for instance.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Absolute path of the file to edit"
+                },
+                "old_string": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "String to replace"
+                },
+                "new_string": {
+                    "type": "string",
+                    "description": "Replacement string (can be empty)"
+                },
+                "replace_all": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Replace all matches (default: first only)"
+                }
+            },
+            "required": [
+                "file_path",
+                "old_string",
+                "new_string"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "Write",
+        "description": "Writes a file to the local filesystem\n\nWrites a file to the local filesystem.\n\nUsage Notes:\n- This tool will overwrite the existing file if there is one at the provided path.\n- If this is an existing file, you MUST use the Read tool first to read the file's contents. This tool will fail if you did not read the file first.\n- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.\n- NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.\n- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Absolute file path to write"
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Content to write"
+                },
+                "encoding": {
+                    "type": "string",
+                    "enum": [
+                        "utf8",
+                        "base64",
+                        "binary"
+                    ],
+                    "default": "utf8",
+                    "description": "File encoding"
+                },
+                "create_directories": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Automatically create missing parent directories"
+                }
+            },
+            "required": [
+                "file_path",
+                "content"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "Glob",
+        "description": "Fast file pattern matching tool that works with any codebase size\n\nFast file pattern matching tool that works with any codebase size. Supports glob patterns like \"**/*.js\" or \"src/**/*.ts\". Returns matching file paths sorted by modification time.\n\nUsage Notes:\n- Use this tool when you need to find files by name patterns\n- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead\n- You can call multiple tools in a single response. It is always better to speculatively perform multiple searches in parallel if they are potentially useful.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Glob pattern string (supports *, ?, ** wildcards)"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Search path (optional, defaults to cwd)"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000,
+                    "description": "Maximum number of results",
+                    "default": 100
+                },
+                "include_directories": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Include directories in results"
+                },
+                "case_sensitive": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Case sensitive matching"
+                }
+            },
+            "required": [
+                "pattern"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "Grep",
+        "description": "A powerful search tool built on ripgrep\n\nA powerful search tool built on ripgrep\n\n  Usage:\n  - ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg` as a Bash command. The Grep tool has been optimized for correct permissions and access.\n  - Supports full regex syntax (e.g., \"log.*Error\", \"function\\s+\\w+\")\n  - Filter files with glob parameter (e.g., \"*.js\", \"**/*.tsx\") or type parameter (e.g., \"js\", \"py\", \"rust\")\n  - Output modes: \"content\" shows matching lines, \"files_with_matches\" shows only file paths (default), \"count\" shows match counts\n  - Use Task tool for open-ended searches requiring multiple rounds\n  - Pattern syntax: Uses ripgrep (not grep) - literal braces need escaping (use `interface\\{\\}` to find `interface{}` in Go code)\n  - Multiline matching: By default patterns match within single lines only. For cross-line patterns like `struct \\{[\\s\\S]*?field`, use `multiline: true`\n",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pattern": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The regular expression pattern to search for in file contents"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "File or directory to search in (rg PATH). Defaults to current working directory"
+                },
+                "glob": {
+                    "type": "string",
+                    "description": "Glob pattern to filter files (e.g. \"*.js\", \"*.{ts,tsx}\") - maps to rg --glob"
+                },
+                "type": {
+                    "type": "string",
+                    "description": "File type to search (rg --type). Common types: js, py, rust, go, java, etc. More efficient than include for standard file types"
+                },
+                "output_mode": {
+                    "type": "string",
+                    "enum": [
+                        "content",
+                        "files_with_matches",
+                        "count"
+                    ],
+                    "default": "files_with_matches",
+                    "description": "Output mode: \"content\" shows matching lines (supports -A/-B/-C context, -n line numbers, head_limit), \"files_with_matches\" shows file paths (supports head_limit), \"count\" shows match counts (supports head_limit). Defaults to \"files_with_matches\""
+                },
+                "-i": {
+                    "type": "boolean",
+                    "description": "Case insensitive search (rg -i)"
+                },
+                "-n": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show line numbers in output (rg -n). Requires output_mode: \"content\", ignored otherwise. Defaults to true"
+                },
+                "-B": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of lines to show before each match (rg -B). Requires output_mode: \"content\", ignored otherwise"
+                },
+                "-A": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of lines to show after each match (rg -A). Requires output_mode: \"content\", ignored otherwise"
+                },
+                "-C": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Number of lines to show before and after each match (rg -C). Requires output_mode: \"content\", ignored otherwise"
+                },
+                "head_limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Limit output to first N lines/entries, equivalent to \"| head -N\". Works across all output modes: content (limits output lines), files_with_matches (limits file paths), count (limits count entries). Defaults based on \"cap\" experiment value: 0 (unlimited), 20, or 100"
+                },
+                "offset": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Skip first N lines/entries before applying head_limit, equivalent to \"| tail -n +N | head -N\". Works across all output modes. Defaults to 0"
+                },
+                "multiline": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Enable multiline mode where . matches newlines and patterns can span lines (rg -U --multiline-dotall). Default: false"
+                }
+            },
+            "required": [
+                "pattern"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "Bash",
+        "description": "Execute bash commands in a persistent shell session with optional timeout\n\nExecutes bash commands with proper handling and security measures.\n\nIMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO NOT use it for file operations (reading, writing, editing, searching, finding files) - use the specialized tools for this instead.\n\nBefore executing commands:\n\n1. Directory Verification:\n   - If the command will create new directories or files, first use 'ls' to verify the parent directory exists and is the correct location\n   - For example, before running \"mkdir foo/bar\", first use 'ls foo' to check that \"foo\" exists and is the intended parent directory\n\n2. Command Execution:\n   - Always quote file paths that contain spaces with double quotes (e.g., cd \"path with spaces/file.txt\")\n   - Examples of proper quoting:\n     * cd \"/Users/name/My Documents\" (correct)\n     * cd /Users/name/My Documents (incorrect - will fail)\n     * python \"/path/with spaces/script.py\" (correct)\n     * python /path/with spaces/script.py (incorrect - will fail)\n\nUsage Notes:\n- The command argument is required\n- You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 30000ms (30 seconds)\n- It is very helpful if you write a clear, concise description of what this command does in 5-10 words\n- If the output exceeds 30000 characters, output will be truncated before being returned to you\n- You can use the run_in_background parameter to run the command in the background, which allows you to continue working while the command runs. You can monitor the output using the TaskOutput tool. You do not need to use \"&\" at the end of the command when using this parameter\n- Avoid using Bash with the find, grep, cat, head, tail, sed, awk, or echo commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:\n-  - File search: Use Glob (NOT find or ls)\n-  - Content search: Use Grep (NOT grep or rg)\n-  - Read files: Use Read (NOT cat/head/tail)\n-  - Edit files: Use Edit (NOT sed/awk)\n-  - Write files: Use Write (NOT echo >/cat <<EOF)\n-  - Communication: Output text directly (NOT echo/printf)\n- When issuing multiple commands:\n-  - If the commands are independent and can run in parallel, make multiple Bash tool calls in a single message. For example, if you need to run \"git status\" and \"git diff\", send a single message with two Bash tool calls in parallel\n-  - If the commands depend on each other and must run sequentially, use a single Bash call with \"&&\" to chain them together (e.g., git add . && git commit -m \"message\" && git push). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead\n-  - Use \";\" only when you need to run commands sequentially but don't care if earlier commands fail\n-  - DO NOT use newlines to separate commands (newlines are ok in quoted strings)\n- Try to maintain your current working directory throughout the session by using absolute paths and avoiding usage of cd. You may use cd if the User explicitly requests it\n-  Good example: pytest /foo/bar/tests\n-  Bad example: cd /foo/bar && pytest tests\n\nImportant:\n[WARN] Committing changes with git:\n[WARN]  - Only create commits when requested by the user. If unclear, ask first\n[WARN]  - Git Safety Protocol:\n[WARN]  * NEVER update the git config\n[WARN]  * NEVER run destructive/irreversible git commands (like push --force, hard reset, etc) unless the user explicitly requests them\n[WARN]  * NEVER skip hooks (--no-verify, --no-gpg-sign, etc) unless the user explicitly requests it\n[WARN]  * NEVER run force push to main/master, warn the user if they request it\n[WARN]  * Avoid git commit --amend. ONLY use --amend when either (1) user explicitly requested amend OR (2) adding edits from pre-commit hook\n[WARN]  * Before amending: ALWAYS check authorship (git log -1 --format=\"%an %ae\")\n[WARN]  * NEVER commit changes unless the user explicitly asks you to\n[WARN]  - When creating commits:\n[WARN]  1. Run git status, git diff, and git log in parallel to understand changes\n[WARN]  2. Analyze staged changes and draft a concise commit message (1-2 sentences) focusing on \"why\" rather than \"what\"\n[WARN]  3. Add relevant untracked files, create the commit, and run git status to verify\n[WARN]  4. Always pass commit message via HEREDOC format\n[WARN]  - DO NOT push to remote repository unless explicitly requested\n[WARN]  - NEVER use git commands with the -i flag (no interactive input supported)\n[WARN]  - If no changes to commit, do not create an empty commit\n[WARN] Creating pull requests:\n[WARN]  - Use the gh command for ALL GitHub-related tasks\n[WARN]  - When creating a PR:\n[WARN]  1. Run git status, git diff, and git log in parallel to understand branch changes\n[WARN]  2. Analyze all commits (not just the latest) and draft a PR summary\n[WARN]  3. Create new branch if needed, push with -u flag, and create PR using gh pr create with HEREDOC body format\n[WARN]  - Return the PR URL when done\n[WARN] Other important notes:\n[WARN]  - Dangerous commands (rm -rf, sudo, etc.) require user confirmation\n[WARN]  - Background commands require manual termination using KillShell\n[WARN]  - NEVER use find, grep, cat, sed, etc. — use dedicated tools instead",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Bash command to execute"
+                },
+                "timeout": {
+                    "type": "integer",
+                    "minimum": 1000,
+                    "maximum": 300000,
+                    "default": 30000,
+                    "description": "Timeout in milliseconds (default 30000ms)"
+                },
+                "cwd": {
+                    "type": "string",
+                    "description": "Working directory (optional; applies only to this command). To persist, use cd"
+                },
+                "env": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    },
+                    "description": "Environment variables (key-value)"
+                },
+                "run_in_background": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Run in background (suitable for long-running commands)"
+                }
+            },
+            "required": [
+                "command"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "Task",
+        "description": "Launch a new agent to handle complex, multi-step tasks autonomously\n\n## Task\n\nLaunch a new agent to handle complex, multi-step tasks autonomously.\n\nThe Task tool launches specialized agents (subprocesses) that autonomously handle complex tasks. Each agent type has specific capabilities and tools available to it.\n\nAvailable agent types and the tools they have access to:\n- general-purpose: General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you. (Tools: All tools)\n- Explore: Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). When calling this agent, specify the desired thoroughness level: \"quick\" for basic searches, \"medium\" for moderate exploration, or \"very thorough\" for comprehensive analysis across multiple locations and naming conventions. (Tools: Glob, Grep, Read, WebFetch, WebSearch)\n- Plan: Software architect agent for designing implementation plans. Use this when you need to plan the implementation strategy for a task. Returns step-by-step plans, identifies critical files, and considers architectural trade-offs. (Tools: All tools)\n- statusline-setup: Use this agent to configure the user's Claude Code status line setting. (Tools: Read, Edit)\n- verification: Independent verification agent that validates implementation by running builds, tests, linters, and adversarial probes. Strictly read-only — cannot modify code. Use after completing implementation to get an independent quality assessment. (Tools: Read, Glob, Grep, Bash)\n- customer-support: Handle support tickets, FAQ responses, and customer emails. Creates help docs, troubleshooting guides, and canned responses. Use PROACTIVELY for customer inquiries or support documentation. (Tools: All tools)\n- sales-automator: Draft cold emails, follow-ups, and proposal templates. Creates pricing pages, case studies, and sales scripts. Use PROACTIVELY for sales outreach or lead nurturing. (Tools: All tools)\n- seo-authority-builder: Analyzes content for E-E-A-T signals and suggests improvements to build authority and trust. Identifies missing credibility elements. Use PROACTIVELY for YMYL topics. (Tools: All tools)\n- reference-builder: Creates exhaustive technical references and API documentation. Generates comprehensive parameter listings, configuration guides, and searchable reference materials. Use PROACTIVELY for API docs, configuration references, or complete technical specifications. (Tools: All tools)\n- backend-architect: Design RESTful APIs, microservice boundaries, and database schemas. Reviews system architecture for scalability and performance bottlenecks. Use PROACTIVELY when creating new backend services or APIs. (Tools: All tools)\n- code-reviewer: Expert code review specialist. Proactively reviews code for quality, security, and maintainability. Use immediately after writing or modifying code. (Tools: All tools)\n- ios-developer: Develop native iOS applications with Swift/SwiftUI. Masters UIKit/SwiftUI, Core Data, networking, and app lifecycle. Use PROACTIVELY for iOS-specific features, App Store optimization, or native iOS development. (Tools: All tools)\n- terraform-specialist: Write advanced Terraform modules, manage state files, and implement IaC best practices. Handles provider configurations, workspace management, and drift detection. Use PROACTIVELY for Terraform modules, state issues, or IaC automation. (Tools: All tools)\n- java-pro: Master modern Java with streams, concurrency, and JVM optimization. Handles Spring Boot, reactive programming, and enterprise patterns. Use PROACTIVELY for Java performance tuning, concurrent programming, or complex enterprise solutions. (Tools: All tools)\n- prompt-engineer: Optimizes prompts for LLMs and AI systems. Use when building AI features, improving agent performance, or crafting system prompts. Expert in prompt patterns and techniques. (Tools: All tools)\n- kubernetes-architect: Design cloud-native infrastructure with Kubernetes at its core across AWS/Azure/GCP and hybrid environments. Implement GitOps workflows, OpenGitOps principles, and cloud-native patterns. Masters EKS, AKS, GKE, and self-managed clusters. Handles service mesh, observability, and progressive delivery. Use PROACTIVELY for Kubernetes architecture, GitOps implementation, or cloud-native transformation. (Tools: All tools)\n- seo-structure-architect: Analyzes and optimizes content structure including header hierarchy, suggests schema markup, and internal linking opportunities. Creates search-friendly content organization. Use PROACTIVELY for content structuring. (Tools: All tools)\n- ruby-pro: Write idiomatic Ruby code with metaprogramming, Rails patterns, and performance optimization. Specializes in Ruby on Rails, gem development, and testing frameworks. Use PROACTIVELY for Ruby refactoring, optimization, or complex Ruby features. (Tools: All tools)\n- hybrid-cloud-architect: Design hybrid cloud infrastructure across AWS/Azure/GCP and OpenStack on-premises environments. Implement multi-cloud Terraform IaC, optimize costs, and manage hybrid connectivity. Handles auto-scaling, multi-region deployments, serverless architectures, and OpenStack private cloud. Use PROACTIVELY for hybrid cloud infrastructure, migration planning, or on-prem/cloud integration. (Tools: All tools)\n- ml-engineer: Implement ML pipelines, model serving, and feature engineering. Handles TensorFlow/PyTorch deployment, A/B testing, and monitoring. Use PROACTIVELY for ML model integration or production deployment. (Tools: All tools)\n- test-automator: Create comprehensive test suites with unit, integration, and e2e tests. Sets up CI pipelines, mocking strategies, and test data. Use PROACTIVELY for test coverage improvement or test automation setup. (Tools: All tools)\n- docs-architect: Creates comprehensive technical documentation from existing codebases. Analyzes architecture, design patterns, and implementation details to produce long-form technical manuals and ebooks. Use PROACTIVELY for system documentation, architecture guides, or technical deep-dives. (Tools: All tools)\n- golang-pro: Write idiomatic Go code with goroutines, channels, and interfaces. Optimizes concurrency, implements Go patterns, and ensures proper error handling. Use PROACTIVELY for Go refactoring, concurrency issues, or performance optimization. (Tools: All tools)\n- legacy-modernizer: Refactor legacy codebases, migrate outdated frameworks, and implement gradual modernization. Handles technical debt, dependency updates, and backward compatibility. Use PROACTIVELY for legacy system updates, framework migrations, or technical debt reduction. (Tools: All tools)\n- performance-engineer: Profile applications, optimize bottlenecks, and implement caching strategies. Handles load testing, CDN setup, and query optimization. Use PROACTIVELY for performance issues or optimization tasks. (Tools: All tools)\n- api-documenter: Create OpenAPI/Swagger specs, generate SDKs, and write developer documentation. Handles versioning, examples, and interactive docs. Use PROACTIVELY for API documentation or client library generation. (Tools: All tools)\n- seo-meta-optimizer: Creates optimized meta titles, descriptions, and URL suggestions based on character limits and best practices. Generates compelling, keyword-rich metadata. Use PROACTIVELY for new content. (Tools: All tools)\n- debugger: Debugging specialist for errors, test failures, and unexpected behavior. Use proactively when encountering any issues. (Tools: All tools)\n- cpp-pro: Write idiomatic C++ code with modern features, RAII, smart pointers, and STL algorithms. Handles templates, move semantics, and performance optimization. Use PROACTIVELY for C++ refactoring, memory safety, or complex C++ patterns. (Tools: All tools)\n- quant-analyst: Build financial models, backtest trading strategies, and analyze market data. Implements risk metrics, portfolio optimization, and statistical arbitrage. Use PROACTIVELY for quantitative finance, trading algorithms, or risk analysis. (Tools: All tools)\n- minecraft-bukkit-pro: Master Minecraft server plugin development with Bukkit, Spigot, and Paper APIs. Specializes in event-driven architecture, command systems, world manipulation, player management, and performance optimization. Use PROACTIVELY for plugin architecture, gameplay mechanics, server-side features, or cross-version compatibility. (Tools: All tools)\n- seo-cannibalization-detector: Analyzes multiple provided pages to identify keyword overlap and potential cannibalization issues. Suggests differentiation strategies. Use PROACTIVELY when reviewing similar content. (Tools: All tools)\n- risk-manager: Monitor portfolio risk, R-multiples, and position limits. Creates hedging strategies, calculates expectancy, and implements stop-losses. Use PROACTIVELY for risk assessment, trade tracking, or portfolio protection. (Tools: All tools)\n- rust-pro: Write idiomatic Rust with ownership patterns, lifetimes, and trait implementations. Masters async/await, safe concurrency, and zero-cost abstractions. Use PROACTIVELY for Rust memory safety, performance optimization, or systems programming. (Tools: All tools)\n- seo-content-refresher: Identifies outdated elements in provided content and suggests updates to maintain freshness. Finds statistics, dates, and examples that need updating. Use PROACTIVELY for older content. (Tools: All tools)\n- database-admin: Manage database operations, backups, replication, and monitoring. Handles user permissions, maintenance tasks, and disaster recovery. Use PROACTIVELY for database setup, operational issues, or recovery procedures. (Tools: All tools)\n- mlops-engineer: Build ML pipelines, experiment tracking, and model registries. Implements MLflow, Kubeflow, and automated retraining. Handles data versioning and reproducibility. Use PROACTIVELY for ML infrastructure, experiment management, or pipeline automation. (Tools: All tools)\n- error-detective: Search logs and codebases for error patterns, stack traces, and anomalies. Correlates errors across systems and identifies root causes. Use PROACTIVELY when debugging issues, analyzing logs, or investigating production errors. (Tools: All tools)\n- tutorial-engineer: Creates step-by-step tutorials and educational content from code. Transforms complex concepts into progressive learning experiences with hands-on examples. Use PROACTIVELY for onboarding guides, feature tutorials, or concept explanations. (Tools: All tools)\n- seo-keyword-strategist: Analyzes keyword usage in provided content, calculates density, suggests semantic variations and LSI keywords based on the topic. Prevents over-optimization. Use PROACTIVELY for content optimization. (Tools: All tools)\n- search-specialist: Expert web researcher using advanced search techniques and synthesis. Masters search operators, result filtering, and multi-source verification. Handles competitive analysis and fact-checking. Use PROACTIVELY for deep research, information gathering, or trend analysis. (Tools: All tools)\n- legal-advisor: Draft privacy policies, terms of service, disclaimers, and legal notices. Creates GDPR-compliant texts, cookie policies, and data processing agreements. Use PROACTIVELY for legal documentation, compliance texts, or regulatory requirements. (Tools: All tools)\n- database-optimizer: Optimize SQL queries, design efficient indexes, and handle database migrations. Solves N+1 problems, slow queries, and implements caching. Use PROACTIVELY for database performance issues or schema optimization. (Tools: All tools)\n- seo-content-planner: Creates comprehensive content outlines and topic clusters for SEO. Plans content calendars and identifies topic gaps. Use PROACTIVELY for content strategy and planning. (Tools: All tools)\n- flutter-expert: Master Flutter development with Dart, widgets, and platform integrations. Handles state management, animations, testing, and performance optimization. Deploys to iOS, Android, Web, and desktop. Use PROACTIVELY for Flutter architecture, UI implementation, or cross-platform features. (Tools: All tools)\n- ai-engineer: Build LLM applications, RAG systems, and prompt pipelines. Implements vector search, agent orchestration, and AI API integrations. Use PROACTIVELY for LLM features, chatbots, or AI-powered applications. (Tools: All tools)\n- architect-reviewer: Reviews code changes for architectural consistency and patterns. Use PROACTIVELY after any structural changes, new services, or API modifications. Ensures SOLID principles, proper layering, and maintainability. (Tools: All tools)\n- seo-content-writer: Writes SEO-optimized content based on provided keywords and topic briefs. Creates engaging, comprehensive content following best practices. Use PROACTIVELY for content creation tasks. (Tools: All tools)\n- content-marketer: Write blog posts, social media content, and email newsletters. Optimizes for SEO and creates content calendars. Use PROACTIVELY for marketing content or social media posts. (Tools: All tools)\n- context-manager: Manages context across multiple agents and long-running tasks. Use when coordinating complex multi-agent workflows or when context needs to be preserved across multiple sessions. MUST BE USED for projects exceeding 10k tokens. (Tools: All tools)\n- data-scientist: Data analysis expert for SQL queries, BigQuery operations, and data insights. Use proactively for data analysis tasks and queries. (Tools: All tools)\n- business-analyst: Analyze metrics, create reports, and track KPIs. Builds dashboards, revenue models, and growth projections. Use PROACTIVELY for business metrics or investor updates. (Tools: All tools)\n- sql-pro: Write complex SQL queries, optimize execution plans, and design normalized schemas. Masters CTEs, window functions, and stored procedures. Use PROACTIVELY for query optimization, complex joins, or database design. (Tools: All tools)\n- security-auditor: Review code for vulnerabilities, implement secure authentication, and ensure OWASP compliance. Handles JWT, OAuth2, CORS, CSP, and encryption. Use PROACTIVELY for security reviews, auth flows, or vulnerability fixes. (Tools: All tools)\n- cloud-architect: Design AWS/Azure/GCP infrastructure, implement Terraform IaC, and optimize cloud costs. Handles auto-scaling, multi-region deployments, and serverless architectures. Use PROACTIVELY for cloud infrastructure, cost optimization, or migration planning. (Tools: All tools)\n- php-pro: Write idiomatic PHP code with generators, iterators, SPL data structures, and modern OOP features. Use PROACTIVELY for high-performance PHP applications. (Tools: All tools)\n- unity-developer: Build Unity games with optimized C# scripts, efficient rendering, and proper asset management. Handles gameplay systems, UI implementation, and platform deployment. Use PROACTIVELY for Unity performance issues, game mechanics, or cross-platform builds. (Tools: All tools)\n- incident-responder: Handles production incidents with urgency and precision. Use IMMEDIATELY when production issues occur. Coordinates debugging, implements fixes, and documents post-mortems. (Tools: All tools)\n- elixir-pro: Write idiomatic Elixir code with OTP patterns, supervision trees, and Phoenix LiveView. Masters concurrency, fault tolerance, and distributed systems. Use PROACTIVELY for Elixir refactoring, OTP design, or complex BEAM optimizations. (Tools: All tools)\n- deployment-engineer: Configure CI/CD pipelines, Docker containers, and cloud deployments. Handles GitHub Actions, Kubernetes, and infrastructure automation. Use PROACTIVELY when setting up deployments, containers, or CI/CD workflows. (Tools: All tools)\n- dx-optimizer: Developer Experience specialist. Improves tooling, setup, and workflows. Use PROACTIVELY when setting up new projects, after team feedback, or when development friction is noticed. (Tools: All tools)\n- scala-pro: Master enterprise-grade Scala development with functional programming, distributed systems, and big data processing. Expert in Apache Pekko, Akka, Spark, ZIO/Cats Effect, and reactive architectures. Use PROACTIVELY for Scala system design, performance optimization, or enterprise integration. (Tools: All tools)\n- javascript-pro: Master modern JavaScript with ES6+, async patterns, and Node.js APIs. Handles promises, event loops, and browser/Node compatibility. Use PROACTIVELY for JavaScript optimization, async debugging, or complex JS patterns. (Tools: All tools)\n- ui-ux-designer: Create interface designs, wireframes, and design systems. Masters user research, prototyping, and accessibility standards. Use PROACTIVELY for design systems, user flows, or interface optimization. (Tools: All tools)\n- python-pro: Write idiomatic Python code with advanced features like decorators, generators, and async/await. Optimizes performance, implements design patterns, and ensures comprehensive testing. Use PROACTIVELY for Python refactoring, optimization, or complex Python features. (Tools: All tools)\n- seo-content-auditor: Analyzes provided content for quality, E-E-A-T signals, and SEO best practices. Scores content and provides improvement recommendations based on established guidelines. Use PROACTIVELY for content review. (Tools: All tools)\n- payment-integration: Integrate Stripe, PayPal, and payment processors. Handles checkout flows, subscriptions, webhooks, and PCI compliance. Use PROACTIVELY when implementing payments, billing, or subscription features. (Tools: All tools)\n- mermaid-expert: Create Mermaid diagrams for flowcharts, sequences, ERDs, and architectures. Masters syntax for all diagram types and styling. Use PROACTIVELY for visual documentation, system diagrams, or process flows. (Tools: All tools)\n- data-engineer: Build ETL pipelines, data warehouses, and streaming architectures. Implements Spark jobs, Airflow DAGs, and Kafka streams. Use PROACTIVELY for data pipeline design or analytics infrastructure. (Tools: All tools)\n- hr-pro: Professional, ethical HR partner for hiring, onboarding/offboarding, PTO and leave, performance, compliant policies, and employee relations. Ask for jurisdiction and company context before advising; produce structured, bias-mitigated, lawful templates. (Tools: All tools)\n- c-pro: Write efficient C code with proper memory management, pointer arithmetic, and system calls. Handles embedded systems, kernel modules, and performance-critical code. Use PROACTIVELY for C optimization, memory issues, or system programming. (Tools: All tools)\n- typescript-pro: Master TypeScript with advanced types, generics, and strict type safety. Handles complex type systems, decorators, and enterprise-grade patterns. Use PROACTIVELY for TypeScript architecture, type inference optimization, or advanced typing patterns. (Tools: All tools)\n- seo-snippet-hunter: Formats content to be eligible for featured snippets and SERP features. Creates snippet-optimized content blocks based on best practices. Use PROACTIVELY for question-based content. (Tools: All tools)\n- graphql-architect: Design GraphQL schemas, resolvers, and federation. Optimizes queries, solves N+1 problems, and implements subscriptions. Use PROACTIVELY for GraphQL API design or performance issues. (Tools: All tools)\n- network-engineer: Debug network connectivity, configure load balancers, and analyze traffic patterns. Handles DNS, SSL/TLS, CDN setup, and network security. Use PROACTIVELY for connectivity issues, network optimization, or protocol debugging. (Tools: All tools)\n- mobile-developer: Develop React Native or Flutter apps with native integrations. Handles offline sync, push notifications, and app store deployments. Use PROACTIVELY for mobile features, cross-platform code, or app optimization. (Tools: All tools)\n- csharp-pro: Write modern C# code with advanced features like records, pattern matching, and async/await. Optimizes .NET applications, implements enterprise patterns, and ensures comprehensive testing. Use PROACTIVELY for C# refactoring, performance optimization, or complex .NET solutions. (Tools: All tools)\n- frontend-developer: Build React components, implement responsive layouts, and handle client-side state management. Optimizes frontend performance and ensures accessibility. Use PROACTIVELY when creating UI components or fixing frontend issues. (Tools: All tools)\n- devops-troubleshooter: Debug production issues, analyze logs, and fix deployment failures. Masters monitoring tools, incident response, and root cause analysis. Use PROACTIVELY for production debugging or system outages. (Tools: All tools)\n\nWhen using the Task tool, you must specify a subagent_type parameter to select which agent type to use.\n\nWhen NOT to use the Task tool:\n- If you want to read a specific file path, use the Read or Glob tool instead of the Task tool, to find the match more quickly\n- If you are searching for a specific class definition like \"class Foo\", use the Glob tool instead, to find the match more quickly\n- If you are searching for code within a specific file or set of 2-3 files, use the Read tool instead of the Task tool, to find the match more quickly\n- Other tasks that are not related to the agent descriptions above\n\n\nUsage notes:\n- Always include a short description (3-5 words) summarizing what the agent will do\n- Launch multiple agents concurrently whenever possible, to maximize performance; to do that, use a single message with multiple tool uses\n- When the agent is done, it will return a single message back to you. The result returned by the agent is not visible to the user. To show the user the result, you should send a text message back to the user with a concise summary of the result.\n- You can optionally run agents in the background using the run_in_background parameter. When an agent runs in the background, you will need to use TaskOutput to retrieve its results once it's done. You can continue to work while background agents run - When you need their results to continue you can use TaskOutput in blocking mode to pause and wait for their results.\n- Agents can be resumed using the `resume` parameter by passing the agent ID from a previous invocation. When resumed, the agent continues with its full previous context preserved. When NOT resuming, each invocation starts fresh and you should provide a detailed task description with all necessary context.\n- When the agent is done, it will return a single message back to you along with its agent ID. You can use this ID to resume the agent later if needed for follow-up work.\n- Provide clear, detailed prompts so the agent can work autonomously and return exactly the information you need.\n- Agents with \"access to current context\" can see the full conversation history before the tool call. When using these agents, you can write concise prompts that reference earlier context (e.g., \"investigate the error discussed above\") instead of repeating information. The agent will receive all prior messages and understand the context.\n- The agent's outputs should generally be trusted\n- Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent\n- If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.\n- If the user specifies that they want you to run agents \"in parallel\", you MUST send a single message with multiple Task tool use content blocks. For example, if you need to launch both a code-reviewer agent and a test-runner agent in parallel, send a single message with both tool calls.\n\nUsage Notes:\n- subagent_type is required - choose from available agent types\n- description should be 3-5 words (e.g., \"Explore error handling\")\n- prompt should contain a highly detailed task description and specify exactly what information to return\n- Launch multiple agents concurrently when possible for better performance",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "subagent_type": {
+                    "type": "string",
+                    "description": "Subagent type to use (e.g., \"Explore\", \"Plan\")"
+                },
+                "description": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 100,
+                    "description": "Short task description (3-5 words)"
+                },
+                "prompt": {
+                    "type": "string",
+                    "minLength": 10,
+                    "description": "Detailed task instructions"
+                },
+                "run_in_background": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Set to true to run this agent in the background. Use TaskOutput to read the output later."
+                },
+                "resume": {
+                    "type": "string",
+                    "description": "Optional agent ID to resume from. If provided, the agent will continue from the previous execution transcript."
+                },
+                "subagent_session_id": {
+                    "type": "string",
+                    "description": "Internal subagent session id for tracking"
+                }
+            },
+            "required": [
+                "subagent_type",
+                "description",
+                "prompt"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "TaskOutput",
+        "description": "Retrieves output from a running or completed task\n\n- Retrieves output from a running or completed task (background shell, agent, or remote session)\n- Takes a task_id parameter identifying the task\n- Returns the task output along with status information\n- Use block=true (default) to wait for task completion\n- Use block=false for non-blocking check of current status\n- Task IDs can be found using the /tasks command\n- Works with all task types: background shells, async agents, and remote sessions\n\nUsage Notes:\n- task_id is required - the ID returned when starting a background task\n- block=true (default) waits for task completion\n- block=false returns current status immediately\n- timeout defaults to 30000ms (30 seconds), max 600000ms (10 minutes)",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The task ID to get output from"
+                },
+                "block": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether to wait for completion"
+                },
+                "timeout": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 600000,
+                    "default": 30000,
+                    "description": "Max wait time in ms"
+                }
+            },
+            "required": [
+                "task_id"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "TodoWrite",
+        "description": "Use this tool to create and manage a structured task list for your current coding session\n\nUse this tool to create and manage a structured task list for your current coding session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.\nIt also helps the user understand the progress of the task and overall progress of their requests.\n\n## When to Use This Tool\nUse this tool proactively in these scenarios:\n\n1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions\n2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations\n3. User explicitly requests todo list - When the user directly asks you to use the todo list\n4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)\n5. After receiving new instructions - Immediately capture user requirements as todos\n6. When you start working on a task - Mark it as in_progress BEFORE beginning work. Ideally you should only have one todo as in_progress at a time\n7. After completing a task - Mark it as completed and add any new follow-up tasks discovered during implementation\n\n## When NOT to Use This Tool\n\nSkip using this tool when:\n1. There is only a single, straightforward task\n2. The task is trivial and tracking it provides no organizational benefit\n3. The task can be completed in less than 3 trivial steps\n4. The task is purely conversational or informational\n\nNOTE that you should not use this tool if there is only one trivial task to do. In this case you are better off just doing the task directly.\n\n## Task States and Management\n\n1. **Task States**: Use these states to track progress:\n   - pending: Task not yet started\n   - in_progress: Currently working on (limit to ONE task at a time)\n   - completed: Task finished successfully\n\n   **IMPORTANT**: Task descriptions must have two forms:\n   - content: The imperative form describing what needs to be done (e.g., \"Run tests\", \"Build the project\")\n   - activeForm: The present continuous form shown during execution (e.g., \"Running tests\", \"Building the project\")\n\n2. **Task Management**:\n   - Update task status in real-time as you work\n   - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)\n   - Exactly ONE task must be in_progress at any time (not less, not more)\n   - Complete current tasks before starting new ones\n   - Remove tasks that are no longer relevant from the list entirely\n\n3. **Task Completion Requirements**:\n   - ONLY mark a task as completed when you have FULLY accomplished it\n   - If you encounter errors, blockers, or cannot finish, keep the task as in_progress\n   - When blocked, create a new task describing what needs to be resolved\n   - Never mark a task as completed if:\n     - Tests are failing\n     - Implementation is partial\n     - You encountered unresolved errors\n     - You couldn't find necessary files or dependencies\n\n4. **Task Breakdown**:\n   - Create specific, actionable items\n   - Break complex tasks into smaller, manageable steps\n   - Use clear, descriptive task names\n   - Always provide both forms:\n     - content: \"Fix authentication bug\"\n     - activeForm: \"Fixing authentication bug\"\n\nWhen in doubt, use this tool. Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully.\n",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "todos": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {
+                                "type": "string"
+                            },
+                            "content": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "status": {
+                                "type": "string",
+                                "enum": [
+                                    "pending",
+                                    "in_progress",
+                                    "completed"
+                                ]
+                            },
+                            "activeForm": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "priority": {
+                                "type": "string",
+                                "enum": [
+                                    "high",
+                                    "medium",
+                                    "low"
+                                ],
+                                "default": "medium"
+                            }
+                        },
+                        "required": [
+                            "content",
+                            "status",
+                            "activeForm"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "minItems": 1
+                }
+            },
+            "required": [
+                "todos"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "EnterPlanMode",
+        "description": "Use this tool to enter plan mode for complex tasks requiring careful planning\n\nUse this tool when you encounter a complex task that requires careful planning and exploration before implementation. This tool transitions you into plan mode where you can thoroughly explore the codebase and design an implementation approach.\n\n## When to Use This Tool\n\nUse EnterPlanMode when ANY of these conditions apply:\n\n1. **Multiple Valid Approaches**: The task can be solved in several different ways, each with trade-offs\n   - Example: \"Add caching to the API\" - could use Redis, in-memory, file-based, etc.\n   - Example: \"Improve performance\" - many optimization strategies possible\n\n2. **Significant Architectural Decisions**: The task requires choosing between architectural patterns\n   - Example: \"Add real-time updates\" - WebSockets vs SSE vs polling\n   - Example: \"Implement state management\" - Redux vs Context vs custom solution\n\n3. **Large-Scale Changes**: The task touches many files or systems\n   - Example: \"Refactor the authentication system\"\n   - Example: \"Migrate from REST to GraphQL\"\n\n4. **Unclear Requirements**: You need to explore before understanding the full scope\n   - Example: \"Make the app faster\" - need to profile and identify bottlenecks\n   - Example: \"Fix the bug in checkout\" - need to investigate root cause\n\n5. **User Input Needed**: You'll need to ask clarifying questions before starting\n   - If you would use AskUserQuestion to clarify the approach, consider EnterPlanMode instead\n   - Plan mode lets you explore first, then present options with context\n\n## When NOT to Use This Tool\n\nDo NOT use EnterPlanMode for:\n- Simple, straightforward tasks with obvious implementation\n- Small bug fixes where the solution is clear\n- Adding a single function or small feature\n- Tasks you're already confident how to implement\n- Research-only tasks (use the Task tool with explore agent instead)\n\n## What Happens in Plan Mode\n\nIn plan mode, you'll:\n1. Thoroughly explore the codebase using Glob, Grep, and Read tools\n2. Understand existing patterns and architecture\n3. Design an implementation approach\n4. Present your plan to the user for approval\n5. Use AskUserQuestion if you need to clarify approaches\n6. Exit plan mode with ExitPlanMode when ready to implement\n\n## Examples\n\n### GOOD - Use EnterPlanMode:\nUser: \"Add user authentication to the app\"\n- This requires architectural decisions (session vs JWT, where to store tokens, middleware structure)\n\nUser: \"Optimize the database queries\"\n- Multiple approaches possible, need to profile first, significant impact\n\nUser: \"Implement dark mode\"\n- Architectural decision on theme system, affects many components\n\n### BAD - Don't use EnterPlanMode:\nUser: \"Fix the typo in the README\"\n- Straightforward, no planning needed\n\nUser: \"Add a console.log to debug this function\"\n- Simple, obvious implementation\n\nUser: \"What files handle routing?\"\n- Research task, not implementation planning\n\n## Important Notes\n\n- This tool REQUIRES user approval - they must consent to entering plan mode\n- Be thoughtful about when to use it - unnecessary plan mode slows down simple tasks\n- If unsure whether to use it, err on the side of starting implementation\n- You can always ask the user \"Would you like me to plan this out first?\"\n",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "ExitPlanMode",
+        "description": "Use this tool when you are in plan mode and have finished creating your plan and are ready for user approval\n\nUse this tool when you are in plan mode and have finished creating your implementation plan and are ready for user approval.\n\n## PREREQUISITES (MUST be satisfied before calling)\n\n1. [OK] You have created a complete implementation plan\n2. [OK] You have OUTPUT TEXT to explain your plan to the user (not just tool calls)\n3. [OK] The plan includes: summary, implementation steps, affected files, testing method\n\n**DO NOT call this tool if**:\n- [FAIL] You only called tools (Glob/Grep/Read) without outputting any text summary\n- [FAIL] You haven't created a complete plan\n- [FAIL] The plan is empty or incomplete\n\n## How This Tool Works\n- Pass your complete implementation plan as the 'plan' parameter\n- The plan should be in markdown format with clear sections\n- This tool will present your plan to the user for review and approval\n- The user will see your plan and can approve or reject it\n\n## When to Use This Tool\nIMPORTANT: Only use this tool when the task requires planning the implementation steps of a task that requires writing code. For research tasks where you're gathering information, searching files, reading files or in general trying to understand the codebase - do NOT use this tool.\n\n## Handling Ambiguity in Plans\nBefore using this tool, ensure your plan is clear and unambiguous. If there are multiple valid approaches or unclear requirements:\n1. Use the AskUserQuestion tool to clarify with the user\n2. Ask about specific implementation choices (e.g., architectural patterns, which library to use)\n3. Clarify any assumptions that could affect the implementation\n4. Edit your plan file to incorporate user feedback\n5. Only proceed with ExitPlanMode after resolving ambiguities and updating the plan file\n\n## Examples\n\n1. Initial task: \"Search for and understand the implementation of vim mode in the codebase\" - Do not use the exit plan mode tool because you are not planning the implementation steps of a task.\n2. Initial task: \"Help me implement yank mode for vim\" - Use the exit plan mode tool after you have finished planning the implementation steps of the task.\n3. Initial task: \"Add a new feature to handle user authentication\" - If unsure about auth method (OAuth, JWT, etc.), use AskUserQuestion first, then use exit plan mode tool after clarifying the approach.\n",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "plan": {
+                    "type": "string",
+                    "description": "The complete implementation plan in markdown format"
+                }
+            },
+            "required": [
+                "plan"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "AskUserQuestion",
+        "description": "Ask user questions to gather preferences or clarify requirements\n\nUse this tool when you need to ask the user questions during execution. This allows you to:\n1. Gather user preferences or requirements\n2. Clarify ambiguous instructions\n3. Get decisions on implementation choices as you work\n4. Offer choices to the user about what direction to take.\n\nUsage notes:\n- Users will always be able to select \"Other\" to provide custom text input\n- Use multiSelect: true to allow multiple answers to be selected for a question\n- If you recommend a specific option, make that the first option in the list and add \"(Recommended)\" at the end of the label",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question": {
+                                "type": "string",
+                                "description": "The complete question to ask the user. Should be clear, specific, and end with a question mark. Example: \"Which library should we use for date formatting?\" If multiSelect is true, phrase it accordingly, e.g. \"Which features do you want to enable?\""
+                            },
+                            "header": {
+                                "type": "string",
+                                "maxLength": 12,
+                                "description": "Very short label displayed as a chip/tag (max 12 chars). Examples: \"Auth method\", \"Library\", \"Approach\"."
+                            },
+                            "multiSelect": {
+                                "type": "boolean",
+                                "description": "Set to true to allow the user to select multiple options instead of just one. Use when choices are not mutually exclusive."
+                            },
+                            "options": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "label": {
+                                            "type": "string",
+                                            "description": "The display text for this option that the user will see and select. Should be concise (1-5 words) and clearly describe the choice."
+                                        },
+                                        "description": {
+                                            "type": "string",
+                                            "description": "Explanation of what this option means or what will happen if chosen. Useful for providing context about trade-offs or implications."
+                                        }
+                                    },
+                                    "required": [
+                                        "label",
+                                        "description"
+                                    ],
+                                    "additionalProperties": false
+                                },
+                                "minItems": 2,
+                                "maxItems": 4,
+                                "description": "The available choices for this question. Must have 2-4 options. Each option should be a distinct, mutually exclusive choice (unless multiSelect is enabled). There should be no \"Other\" option, that will be provided automatically."
+                            }
+                        },
+                        "required": [
+                            "question",
+                            "header",
+                            "multiSelect",
+                            "options"
+                        ],
+                        "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 4,
+                    "description": "Questions to ask the user (1-4 questions)"
+                }
+            },
+            "required": [
+                "questions"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "Skill",
+        "description": "Execute a skill within the main conversation\n\nExecute a skill within the main conversation\n\n<skills_instructions>\nWhen users ask you to perform tasks, check if any of the available skills below can help complete the task more effectively. Skills provide specialized capabilities and domain knowledge.\n\nWhen using the Skill tool:\n- Invoke skills using this tool with the skill name only\n- When you invoke a skill, you will see <command-message>The \"{name}\" skill is loading</command-message>\n- The skill's prompt will expand and provide detailed instructions on how to complete the task\n\nImportant:\n- Only use skills listed in <available_skills> below\n- Do not invoke a skill that is already running\n- Do not use this tool for built-in CLI commands (like /help, /clear, etc.)\n</skills_instructions>\n\n<available_skills>\n- skill-creator: Create new skills, modify and improve existing skills, and measure skill performance. Use when us...\n- update-config: 配置 Blade harness（settings/hooks/permissions）。用户请求自动化行为时使用此 Skill。\n- agent-browser: Browser automation CLI for AI agents. Use when the user needs to interact with websites, includin...\n- fe-local-test: 本地前端自动化测试。使用 Playwright 对本地 Vite 页面执行自动化测试，生成带截图的测试报告。当用户说\"测试本地页面\"、\"跑一下自测\"、\"生成测试报告\"时使用。\n- frontend-agent: Frontend development expert agent, skilled in React/Midway/egg.js frameworks  development, UI imp...\n- app-search-skill: Master searching and discovering applications and packages in Aone using <tool provider=\"aone\">ao...\n- lazpay-codereview: Java代码审查技能，基于阿里巴巴Java开发规范进行Code Review。TRIGGER when: 用户要求CR、Code Review、代码审查、检查Java代码、审查代码变更、代码评审...\n- find-skills: Helps users discover and install agent skills when they ask questions like \"how do I do X\", \"find...\n- fe-extract-i18n: 扫描指定组件或目录中的硬编码文案，自动提取并生成 language.ts，同时将组件中的硬编码字符串替换为 language.xxx 引用。当用户说\"帮我提取多语言\"、\"生成 language....\n- normandy-cli: 将自然语言的 Normandy 平台运维问题翻译成正确的 `normandy` CLI 命令，并给出简短、可直接复制的命令模板。只要用户在问 auth 登录、app 应用查询、app-group...\n- fe-figma-to-code: Figma 视觉还原。根据 Figma 设计稿生成符合项目规范的 React 组件和 SCSS 样式。当用户说\"根据 Figma 生成组件\"、\"还原这个设计稿\"、\"Figma 转代码\"时使用。\n- fin-dev-pipeline: AFDP (Aipay Financial Development Pipeline) - 金融场景代码开发和更新流水线，支持全栈微服务架构的增量式开发流程\n- fe-gen-api: 在已有模块中新增一个接口。当用户说\"帮我加一个接口\"、\"新增 xxx 接口\"、\"追加 API\"时使用此 skill。自动生成 interface.ts 类型、api.ts 请求函数、mock J...\n- fe-code-review: 代码质量检查 skill。只检查增量代码（git 变更文件），执行 TypeScript 类型检查和 ESLint/Stylelint 检查，自动修复可修复的问题，输出问题清单。当用户说\"帮我检...\n- o2-publish: 自动化 O2 平台的迭代、变更、构建、发布流程\n- dogfood: Systematically explore and test a web application to find bugs, UX issues, and other problems. Us...\n- github-explorer <query>: Explore and summarize popular GitHub projects. Use when the user wants to discover trending GitHu...\n- code-review <file_path>: Review frontend code for best practices, bugs, and improvements. Use when reviewing PRs, checking...\n- base64-parser: Base64 编解码工具，支持编码/解码文本、JSON、二进制文件，自动检测格式，支持批量处理\n</available_skills>\n",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "skill": {
+                    "type": "string",
+                    "description": "The skill name. E.g., \"commit-message\" or \"code-review\""
+                },
+                "args": {
+                    "type": "string",
+                    "description": "Optional arguments for the skill"
+                }
+            },
+            "required": [
+                "skill"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "SlashCommand",
+        "description": "Execute a custom slash command within the main conversation\n\nExecute a custom slash command within the main conversation\n\nHow slash commands work:\nWhen you use this tool, the command's content (from .blade/commands/ or .claude/commands/) will be processed and returned. The content may include:\n- Argument interpolation ($ARGUMENTS, $1, $2, ...)\n- Bash command output (!`git status`)\n- File contents (@src/file.ts)\n\nUsage:\n- `command` (required): The command name without the leading slash\n- `arguments` (optional): Arguments to pass to the command\n- Example: `command: \"review-pr\", arguments: \"123\"`\n\nIMPORTANT: Only use this tool for custom slash commands that appear in the Available Commands list below. Do NOT use for:\n- Built-in CLI commands (like /help, /clear, /compact, etc.)\n- Commands not shown in the list\n- Commands you think might exist but aren't listed\n\nNotes:\n- When a user requests multiple slash commands, execute each one sequentially\n- Only custom slash commands with descriptions are listed in Available Commands\n- Commands with `disable-model-invocation: true` cannot be invoked by this tool\n- If a command is not listed, ask the user to check the slash command file\n\n(Custom commands not yet initialized)",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "The command name without the leading slash, e.g., \"review-pr\" or \"commit\""
+                },
+                "arguments": {
+                    "type": "string",
+                    "description": "Arguments to pass to the command, e.g., \"123\" or \"fix bug\""
+                }
+            },
+            "required": [
+                "command"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    },
+    {
+        "name": "ToolSearch",
+        "description": "Search and load deferred tool schemas\n\nFetches full schema definitions for deferred tools so they can be called. Deferred tools appear by name in <available-deferred-tools> messages. Until fetched, only the name is known — there is no parameter schema, so the tool cannot be invoked.\n\nUsage Notes:\n- Use \"select:Read,Edit,Grep\" to fetch exact tools by name\n- Use keywords to search by tool name or description\n- Once loaded via ToolSearch, a tool becomes callable",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search query. Use \"select:Read,Edit,Grep\" for exact selection, or keywords for fuzzy search."
+                },
+                "max_results": {
+                    "type": "number",
+                    "default": 5,
+                    "description": "Maximum results to return (default 5)"
+                }
+            },
+            "required": [
+                "query"
+            ],
+            "additionalProperties": false,
+            "$schema": "http://json-schema.org/draft-07/schema#"
+        }
+    }
+]

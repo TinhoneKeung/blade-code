@@ -1,0 +1,34 @@
+{
+    "messages": [
+        {
+            "role": "assistant",
+            "content": "请输入您的问题，我将为您提供帮助。"
+        },
+        {
+            "role": "user",
+            "content": "hi"
+        },
+        {
+            "role": "assistant",
+            "content": "你好！我是 Blade Code 的开发助手。有什么我可以帮你的吗？"
+        },
+        {
+            "role": "user",
+            "content": "hi"
+        },
+        {
+            "role": "assistant",
+            "content": "你好！👋 有什么需要帮忙的吗？"
+        },
+        {
+            "role": "user",
+            "content": "hi"
+        }
+    ],
+    "userId": "cli-user",
+    "sessionId": "BQlNbeEkq6R58KXsXgHSI",
+    "workspaceRoot": "/Users/jiangtianhong/wkspace/blade-code",
+    "signal": {},
+    "confirmationHandler": {},
+    "permissionMode": "yolo"
+}

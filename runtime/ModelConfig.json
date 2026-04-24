@@ -1,0 +1,11 @@
+{
+    "provider": "openai-compatible",
+    "apiKey": "a55475ca1e8e47b284e7b6b4484ccf57.MpPtCrhoZx90rrSs",
+    "model": "glm-5.1",
+    "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4/",
+    "temperature": 0,
+    "maxContextTokens": 200000,
+    "maxOutputTokens": 131072,
+    "timeout": 180000,
+    "supportsThinking": false
+}

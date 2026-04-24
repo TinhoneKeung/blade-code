@@ -1,0 +1,42 @@
+{
+  "models": [
+    {
+      "id": "ooXJ71ZEiPC_ccXDjmEEh",
+      "provider": "openai-compatible",
+      "name": "GLM-5.1",
+      "model": "glm-5.1",
+      "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4/",
+      "apiKey": "",
+      "maxContextTokens": 200000,
+      "maxOutputTokens": 131072,
+      "providerId": "zhipuai-coding-plan"
+    },
+    {
+      "id": "i_C2xY5y15w0v8rD_IOVr",
+      "provider": "openai-compatible",
+      "name": "GLM-5",
+      "model": "glm-5",
+      "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4/",
+      "apiKey": "",
+      "maxContextTokens": 200000,
+      "maxOutputTokens": 131072,
+      "providerId": "zhipuai-coding-plan"
+    },
+    {
+      "id": "PmPyRQPX7x5TW5zALo7yf",
+      "provider": "openai-compatible",
+      "name": "GLM-4.7",
+      "model": "glm-4.7",
+      "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4/",
+      "apiKey": ""
+    }
+  ],
+  "currentModelId": "ooXJ71ZEiPC_ccXDjmEEh",
+  "uiTheme": "light",
+  "theme": "kanagawa",
+  "debug": true,
+  "notifySounds": true,
+  "mcpEnabled": true,
+  "mcpServers": {},
+  "permissionMode": "yolo"
+}

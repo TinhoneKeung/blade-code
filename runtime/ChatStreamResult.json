@@ -1,0 +1,10 @@
+{
+    "success": true,
+    "finalMessage": "你好！看起来你在测试。有具体需求随时告诉我，比如：\n\n- 修复 bug\n- 开发新功能\n- 代码重构\n- 项目问题咨询\n\n随时准备帮你！",
+    "metadata": {
+        "turnsCount": 1,
+        "toolCallsCount": 0,
+        "duration": 15174,
+        "tokensUsed": 20056
+    }
+}
