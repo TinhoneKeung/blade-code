@@ -2,7 +2,174 @@
 
 ## Agent
 
+* Agent为什么要每次会话都生成一个新对话？
+
+* Agent 对象什么时候销毁？
+
+* 为什么要无状态？
+
 ### SubAgent
+
+首次初始化发生在 initializeApp
+
+五个内置核心子Agent
+
+````JSON
+[
+    {
+        "name": "general-purpose",
+        "description": "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks. When you are searching for a keyword or file and are not confident that you will find the right match in the first few tries use this agent to perform the search for you.",
+        "tools": []
+    },
+    {
+        "name": "Explore",
+        "description": "Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. \"src/components/**/*.tsx\"), search code for keywords (eg. \"API endpoints\"), or answer questions about the codebase (eg. \"how do API endpoints work?\"). When calling this agent, specify the desired thoroughness level: \"quick\" for basic searches, \"medium\" for moderate exploration, or \"very thorough\" for comprehensive analysis across multiple locations and naming conventions.",
+        "tools": [
+            "Glob",
+            "Grep",
+            "Read",
+            "WebFetch",
+            "WebSearch"
+        ],
+        "systemPrompt": "# Explore Subagent\n\nYou are a specialized code exploration agent. Your job is to **directly execute searches** using the tools available to you.\n\n## CRITICAL RULES\n\n1. **YOU ARE THE EXECUTOR** - Do NOT delegate to other agents. Use your tools (Glob, Grep, Read) directly.\n2. **NO TASK TOOL** - You do NOT have access to the Task tool. Do not attempt to call it.\n3. **DISCOVER BEFORE READ** - Always use Glob first to find what files exist. NEVER guess file paths.\n4. **NO ASSUMPTIONS** - Don't assume file names exist. Search first!\n\n## Your Available Tools\n\n| Tool | Purpose | Example |\n|------|---------|---------|\n| **Glob** | Find files by pattern | `**/*.tsx`, `src/**/*.ts` |\n| **Grep** | Search code content | `useState`, `class.*Component` |\n| **Read** | Read file contents | After finding files with Glob |\n| **WebFetch** | Fetch URL content | Documentation URLs |\n| **WebSearch** | Search the web | External information |\n\n## Workflow\n\n1. Glob(\"*\") -> Discover root structure\n2. Glob(\"src/**/*\") -> Map source directory\n3. Grep(\"keyword\") -> Find relevant code\n4. Read(found_file) -> Examine details\n5. Return comprehensive summary\n\n## Thoroughness Levels\n\n- **quick**: 1-2 Glob searches, read key files only\n- **medium**: Multiple Glob patterns, Grep for keywords, read 5-10 files\n- **very thorough**: Exhaustive search, all patterns, read all relevant files\n\nRemember: Execute searches directly. Return ONE comprehensive message to the parent agent."
+    },
+    {
+        "name": "Plan",
+        "description": "Software architect agent for designing implementation plans. Use this when you need to plan the implementation strategy for a task. Returns step-by-step plans, identifies critical files, and considers architectural trade-offs.",
+        "tools": [],
+        "systemPrompt": "# Plan Subagent\n\nYou are a software architect specializing in implementation planning.\n\n## Your Role\n\n1. Analyze requirements thoroughly\n2. Explore the codebase to understand existing patterns\n3. Design step-by-step implementation plans\n4. Identify critical files and dependencies\n5. Consider architectural trade-offs\n\n## Output Format\n\n### Implementation Plan\n\n**Goal**: [Clear statement of what will be implemented]\n\n**Critical Files**:\n- `path/to/file.ts` - [Why it's important]\n\n**Steps**:\n1. [Step with specific actions]\n2. [Step with specific actions]\n...\n\n**Trade-offs Considered**:\n- Option A vs Option B: [Reasoning]\n\n**Risks**:\n- [Potential issue and mitigation]\n\nBe thorough but concise. Focus on actionable steps."
+    },
+    {
+        "name": "statusline-setup",
+        "description": "Use this agent to configure the user's Claude Code status line setting.",
+        "tools": [
+            "Read",
+            "Edit"
+        ]
+    },
+    {
+        "name": "verification",
+        "description": "Independent verification agent that validates implementation by running builds, tests, linters, and adversarial probes. Strictly read-only — cannot modify code. Use after completing implementation to get an independent quality assessment.",
+        "tools": [
+            "Read",
+            "Glob",
+            "Grep",
+            "Bash"
+        ],
+        "systemPrompt": "# Verification Agent\n\nYou are an **independent verification engineer**. Your sole purpose is to find problems — not to praise or reassure. You are the last line of defense before code ships.\n\n## Constraints\n\n1. **READ-ONLY**: You have NO write tools (no Edit, Write, or NotebookEdit). You cannot modify files. If you discover issues, report them — do not attempt to fix them.\n2. **NO SUB-AGENTS**: You must not delegate to other agents or use the Task tool. Execute all verification steps yourself using your tools directly.\n3. **TOOL-BASED EVIDENCE ONLY**: Every claim must be backed by actual tool output. Never say \"looks correct\" or \"should work\" — run the command and prove it.\n4. **NO ASSUMPTIONS**: Do not assume tests pass. Do not assume types are correct. Run the checks.\n\n## Verification Workflow\n\nExecute these phases in order. Do NOT skip any phase.\n\n### Phase 1: Project Setup Detection\n\n1. Use Glob to find project config files: `package.json`, `tsconfig.json`, `biome.json`, `.eslintrc.*`, `vitest.config.*`, `jest.config.*`, `Makefile`, `Cargo.toml`, `go.mod`, etc.\n2. Use Read to examine them and determine:\n   - Package manager (bun/npm/pnpm/yarn)\n   - Available scripts (test, lint, type-check, build)\n   - Project language and framework\n3. Identify which checks are available for this project.\n\n### Phase 2: Automated Checks\n\nRun all applicable checks. Capture full output.\n\n| Check | Typical Command | Priority |\n|-------|----------------|----------|\n| **Type checking** | `bun run type-check` or `npx tsc --noEmit` | HIGH |\n| **Tests** | `bun run test:all` or `npm test` | HIGH |\n| **Linting** | `bun run lint` or `npx biome check` | HIGH |\n| **Build** | `bun run build` | MEDIUM |\n\n- If a command fails, record the exact error output.\n- If a command succeeds, record confirmation.\n- Set reasonable timeouts (use Bash timeout parameter).\n\n### Phase 3: Code Review of Changed Files\n\n1. Run `git diff --name-only HEAD~1` (or appropriate range) to identify changed files.\n2. Read each changed file and review for:\n   - **Logic errors**: off-by-one, null/undefined handling, race conditions\n   - **Type safety**: any casts, type assertions, missing null checks\n   - **Error handling**: uncaught exceptions, missing error paths\n   - **Edge cases**: empty arrays, empty strings, boundary values\n   - **Security**: injection risks, credential exposure, unsafe eval\n   - **Code style**: naming conventions, dead code, commented-out code\n\n### Phase 4: Adversarial Analysis\n\nThink like an attacker or a hostile user:\n\n1. **Input validation**: Are all inputs validated? What happens with malformed data?\n2. **Boundary conditions**: What happens at limits? (max length, zero, negative)\n3. **Concurrency**: Are there race conditions or shared mutable state issues?\n4. **Dependency risks**: Are new dependencies trustworthy? Pinned versions?\n5. **Regression potential**: Could these changes break existing functionality?\n\n## Output Format\n\nYou MUST end your response with a structured verification report:\n\n```\n## Verification Result: PASS | FAIL | PARTIAL\n\n### Automated Checks\n- [ ] Type check: PASS/FAIL — [details]\n- [ ] Tests: PASS/FAIL — [details, including test count]\n- [ ] Lint: PASS/FAIL — [details]\n- [ ] Build: PASS/FAIL — [details]\n\n### Code Review Findings\n- [Issue severity: HIGH/MEDIUM/LOW] [file:line] Description\n  Evidence: [exact code or output]\n\n### Adversarial Analysis\n- [Risk level: HIGH/MEDIUM/LOW] Description\n  Impact: [what could go wrong]\n\n### Summary\n[1-3 sentence overall assessment with specific evidence]\n```\n\n### Verdict Rules\n\n- **PASS**: All automated checks pass AND no HIGH severity issues found.\n- **FAIL**: Any automated check fails OR any HIGH severity issue found.\n- **PARTIAL**: All automated checks pass BUT MEDIUM severity issues exist.\n\nBe thorough. Be skeptical. Find the bugs.",
+        "source": "builtin"
+    }
+]
+````
+
+| Agent            | 定位    | 工具范围                                            | 是否可以修改代码  | 特点     |
+| :--------------- | :---- | :---------------------------------------------- | :-------- | :----- |
+| general-purpose  | 万能通用  | 全部                                              | ✅         | <br /> |
+| Explore          | 代码搜索  | 'Glob', 'Grep', 'Read', 'WebFetch', 'WebSearch' | ❌         | <br /> |
+| Plan             | 架构规划  | 全部                                              | ✅（但职责是规划） | <br /> |
+| statusline-setup | 状态栏配置 | 'Read', 'Edit'                                  | ✅（仅配置文件）  | <br /> |
+| verification     | 验证    | 'Read', 'Glob', 'Grep', 'Bash'                  | <br />    | <br /> |
+
+### **1. general-purpose — 通用万能 Agent**
+
+* **职责**：通用型 agent，用于**研究复杂问题、搜索代码、执行多步骤任务**
+
+* **工具**：`tools: []`，即拥有**所有工具**的访问权限
+
+* **使用场景**：当你搜索关键词/文件但不确定前几次能找到正确匹配时，交给它来执行搜索
+
+* **特点**：没有专门的 systemPrompt，是最灵活的 agent
+
+***
+
+### **2. Explore — 代码探索专家**
+
+* **职责**：**快速探索代码库**的专用 agent
+
+* **工具**：仅限 `Glob`、`Grep`、`Read`、`WebFetch`、`WebSearch`（只读工具，不能修改代码）
+
+* **使用场景**：
+
+  * 按模式查找文件（如 `src/components/**/*.tsx`）
+
+  * 按关键词搜索代码（如 "API endpoints"）
+
+  * 回答关于代码库的问题（如 "API 端点是怎么工作的？"）
+
+* **特点**：有详细的 `systemPrompt`，定义了三个**搜索深度等级**：
+
+  * **quick**：1-2 次 Glob，只看关键文件
+
+  * **medium**：多种 Glob 模式 + Grep，读 5-10 个文件
+
+  * **very thorough**：穷举式搜索，读所有相关文件
+
+***
+
+### **3. Plan — 架构规划师**
+
+* **职责**：**设计实现方案**的软件架构 agent
+
+* **工具**：`tools: []`，拥有**所有工具**（因为规划时可能需要探索代码库）
+
+* **使用场景**：需要为一个任务制定实现策略时
+
+* **特点**：有专门的 `systemPrompt`，输出格式固定为：
+
+  * **Goal**（目标）
+
+  * **Critical Files**（关键文件）
+
+  * **Steps**（分步实现计划）
+
+  * **Trade-offs**（架构权衡）
+
+  * **Risks**（风险与缓解措施）
+
+***
+
+### **4. statusline-setup — 状态栏配置 Agent**
+
+* **职责**：专门用于**配置用户的 Claude Code 状态栏设置**
+
+* **工具**：仅限 `Read` 和 `Edit`（读取和编辑配置文件）
+
+* **使用场景**：用户需要配置状态栏显示时
+
+* **特点**：最简单的 agent，没有自定义 systemPrompt，功能很单一
+
+### **5. verification — 独立验证工程师 🔍**
+
+* **职责**：在代码实现完成后，进行**独立的质量评估**，是代码上线前的"最后一道防线"
+
+* **工具**：`Read`、`Glob`、`Grep`、`Bash`（**严格只读，不能修改代码**）
+
+* **核心原则**：**只找问题，不修问题**。发现 bug 只报告，不尝试修复
+
+#### **验证流程分为 4 个阶段：**
+
+1. **Phase 1 — 项目配置检测**
+
+   * 通过 Glob 找 `package.json`、`tsconfig.json`、`biome.json` 等配置文件
+
+   * 识别包管理器（bun/npm/pnpm/yarn）、可用脚本、项目语言和框架
+2. **Phase 2 — 自动化检查**（通过 Bash 执行）
+
+   * **类型检查**（`tsc --noEmit`）— 高优先级
+
+   * **测试**（`bun run test:all`）— 高优先级
+
+   * **Lint**（`biome check`）— 高优先级
+
+   * **构建**（`bun run build`）— 中优先级
+3. **Phase 3 — 代码审查**
+
+   * 通过 `git diff` 找到变更文件，逐一审查：
+
+   * 逻辑错误、类型安全、错误处理、边界情况、安全问题、代码风格
+4. **Phase 4 — 对抗性分析**（像攻击者一样思考）
+
+   * 输入验证、边界条件、并发竞态、依赖风险、回归风险
 
 ***
 
@@ -25,7 +192,6 @@
      ```
 
    * 如果获取不到远程npmjs的最新版本，同样也跳过版本检查，否则通过 semver.gt 比较版本，如果存在新版本并且缓存中 skipUntilVersion 的值不为true，则弹窗
-
 2. 如果不存在新版本，或者用户完成更新，则在更新回调中初始化整个APP
 
    1. 初始化全局配置，这时候全局配置已经初始化完毕了，首次初始化在 yargs loadConfiguration 中间件中完成，这时候已经可以拿到完整的用户配置
@@ -215,6 +381,68 @@
 
    4. 如果用户通过 --session-id 指定了会话ID, 则覆盖 store 中的默认的随机 ID, 详见 sessionSlice中 restoreSession 方法，/resume 指令用的也是同一个方法，但是指令相比命令行参数多恢复了UI消息和完整的会话消息
 
+   5. 加载主题：如果用户配置了主题，则set 主题，ThemeManager只初始化一次，初始化时通过 Map 保存全部主题和ColorScheme
+
+   6. 加载五个内置的子agent，每个子agent可以指定model属性（目前未兼容， 只为了兼容 cladue），如果未指定默认继承主agent的模型。加载子用户自定义子agent 配置, 首次扫描用户级别以及项目级别 .claude/agents, .balde/agents 下的子agent，扫描目录下所有md文件，使用 yaml formatter 解析 md 内容，一个子agent 必须包含 name 和 description 属性，否则放弃加载，一个标注的解析后的子agent 大概如下
+
+      ```JSON
+        {
+            "name": "customer-support",
+            "description": "Handle support tickets, FAQ responses, and customer emails. Creates help docs, troubleshooting guides, and canned responses. Use PROACTIVELY for customer inquiries or support documentation.",
+            "model": "haiku"
+        }
+      ```
+
+      子agent markdown的主题内容作为系统提示词，一个完整的子agent 的配置包括
+
+      ```TypeScript
+      interface SubagentConfig {
+        /** Subagent 唯一标识符 */
+        name: string;
+
+        /** 描述（给 LLM 看的能力说明） */
+        description: string;
+
+        /** 系统提示模板（可选，支持变量替换） */
+        systemPrompt?: string;
+
+        /** 允许的工具列表（空数组 = 所有工具） */
+        tools?: string[];
+
+        /** UI 背景颜色（可选，用于视觉区分） */
+        color?: SubagentColor;
+
+        /** 子agent文件的实际路径 */
+        configPath?: string;
+
+        /**
+        * 模型别名（sonnet/opus/haiku）或 'inherit'
+        * - inherit: 继承父 Agent 模型（默认）
+        * - 注意：Blade 目前不支持多模型，此字段仅用于兼容 Claude Code 配置
+        */
+        model?: 'sonnet' | 'opus' | 'haiku' | 'inherit' | string;
+
+        /** 权限模式（已映射为 Blade PermissionMode） */
+        permissionMode?: PermissionMode;
+
+        /** 自动加载的 skills 列表 */
+        skills?: string[];
+
+        /** 配置来源（用于调试和优先级） */
+        source?:
+          | 'builtin'
+          | 'claude-code-user'
+          | 'claude-code-project'
+          | 'blade-user'
+          | 'blade-project'
+          | `plugin:${string}`;
+      }
+      ```
+
+      最终返回全部子agent 的个数
+
+   7. 初始化 HookManager，加载用户配置，注意hook 的开关除了用户配置的开关外，还有更细颗粒度会话级别的开关，由 slash 指令 /slash enable, /slash disable 单独控制，如果用户开启了hook，执行SessionStart hook，SessionStart不需要matcher, 默认执行，遍历所有 SessionStart hook根据 hook type（command， promt， function， http） 分类执行。
+
 ## Configuration Management
 
 ## MCP
@@ -226,6 +454,62 @@
 ## Skills
 
 ## Hooks
+
+### HookManager 单例
+
+首次初始化发生在 initializeApp
+
+HookManager内置一份默认配置，将和用户配置合并，hook开关默认关闭，需要手动启用
+
+loadConfig：加载用户配置 `hooks` ，注意 agent 内置了一个 PostToolUse 工具
+
+<br />
+
+```JSON
+[
+    {
+      name: 'builtin:code-review-sensor',
+      matcher: { tools: 'Edit|Write' },
+      hooks: [
+        {
+          type: HookType.Prompt,
+          prompt:
+            '审查此代码变更，重点检查：' +
+            '1) 安全漏洞（命令注入、XSS、SQL 注入、硬编码密钥/密码）' +
+            '2) 明显的逻辑错误（无限循环、off-by-one、空引用）' +
+            '3) 类型安全问题。' +
+            '如果发现严重问题，将问题描述放在 hookSpecificOutput.additionalContext 中。' +
+            '如果没有严重问题，返回 approve。',
+          model: undefined,
+          timeout: 15,
+        },
+      ],
+    },
+  ]
+```
+
+<br />
+
+getMatchingHook: 根据 hook的 matcher属性和hook context 来判断当前hook 是否应该执行， macther有三种匹配模式，1、根据matcher.tools匹配，2根据matcher.path匹配，3、根据matcher.commands匹配
+
+matcher的类型
+
+<br />
+
+```
+interface MatcherConfig {
+  /** 工具名匹配 (支持精确、管道分隔、正则、或数组) */
+  tools?: string | string[];
+
+  /** 文件路径匹配 (glob 模式) */
+  paths?: string | string[];
+
+  /** 命令匹配 (正则) */
+  commands?: string | string[];
+}
+```
+
+只有PreToolUse, PostToolUse,PermissionRequest,PostToolUseFailure 这四个钩子需要检查 matcher，其他的钩子默认允许执行
 
 ## Spec Mode
 
@@ -239,6 +523,259 @@
 
 ## Zustand/Vanilla Store
 
+完整 Store
+
+<br />
+
+```JSON
+{
+    "session": {
+        "sessionId": "OppyrH5ug5s5KTu7qMOub",
+        "messages": [],
+        "restoredContextMessages": null,
+        "restoredVisibleMessageCount": 0,
+        "isCompacting": false,
+        "currentCommand": null,
+        "error": null,
+        "isActive": true,
+        "tokenUsage": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "totalTokens": 0,
+            "maxContextTokens": 200000
+        },
+        "currentThinkingContent": null,
+        "thinkingExpanded": false,
+        "clearCount": 0,
+        "historyExpanded": false,
+        "expandedMessageCount": 100,
+        "currentStreamingMessageId": null,
+        "currentStreamingChunks": [],
+        "currentStreamingLines": [],
+        "currentStreamingTail": "",
+        "currentStreamingLineCount": 0,
+        "currentStreamingVersion": 0,
+        "finalizingStreamingMessageId": null,
+        "actions": {}
+    },
+    "app": {
+        "initializationStatus": "ready",
+        "initializationError": null,
+        "activeModal": "none",
+        "modelEditorTarget": null,
+        "todos": [],
+        "awaitingSecondCtrlC": false,
+        "thinkingModeEnabled": false,
+        "subagentProgress": null,
+        "actions": {}
+    },
+    "config": {
+        "config": {
+            "currentModelId": "ooXJ71ZEiPC_ccXDjmEEh",
+            "models": [
+                {
+                    "id": "ooXJ71ZEiPC_ccXDjmEEh",
+                    "provider": "openai-compatible",
+                    "name": "GLM-5.1",
+                    "model": "glm-5.1",
+                    "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4/",
+                    "apiKey": "a55475ca1e8e47b284e7b6b4484ccf57.MpPtCrhoZx90rrSs",
+                    "maxContextTokens": 200000,
+                    "maxOutputTokens": 131072,
+                    "providerId": "zhipuai-coding-plan"
+                },
+                {
+                    "id": "i_C2xY5y15w0v8rD_IOVr",
+                    "provider": "openai-compatible",
+                    "name": "GLM-5",
+                    "model": "glm-5",
+                    "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4/",
+                    "apiKey": "a55475ca1e8e47b284e7b6b4484ccf57.MpPtCrhoZx90rrSs",
+                    "maxContextTokens": 200000,
+                    "maxOutputTokens": 131072,
+                    "providerId": "zhipuai-coding-plan"
+                },
+                {
+                    "id": "PmPyRQPX7x5TW5zALo7yf",
+                    "provider": "openai-compatible",
+                    "name": "GLM-4.7",
+                    "model": "glm-4.7",
+                    "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4/",
+                    "apiKey": "d711b990d9a249df82d64a07952df556.1qBdIZSWK7dTnr2X"
+                }
+            ],
+            "temperature": 0,
+            "maxContextTokens": 128000,
+            "stream": true,
+            "topP": 0.9,
+            "topK": 50,
+            "timeout": 180000,
+            "theme": "kanagawa",
+            "uiTheme": "light",
+            "language": "zh-CN",
+            "fontSize": 14,
+            "autoSaveSessions": true,
+            "notifyBuild": true,
+            "notifyErrors": false,
+            "notifySounds": true,
+            "privacyTelemetry": false,
+            "privacyCrash": true,
+            "debug": true,
+            "mcpEnabled": true,
+            "mcpServers": {},
+            "permissions": {
+                "allow": [
+                    "Bash(pwd)",
+                    "Bash(which *)",
+                    "Bash(whoami)",
+                    "Bash(hostname)",
+                    "Bash(uname *)",
+                    "Bash(date)",
+                    "Bash(echo *)",
+                    "Bash(ls *)",
+                    "Bash(tree *)",
+                    "Bash(git status)",
+                    "Bash(git status -*)",
+                    "Bash(git log *)",
+                    "Bash(git diff *)",
+                    "Bash(git show *)",
+                    "Bash(git branch -* *)",
+                    "Bash(git branch)",
+                    "Bash(git tag -l *)",
+                    "Bash(git tag --list *)",
+                    "Bash(git stash list *)",
+                    "Bash(git stash show *)",
+                    "Bash(git rev-parse *)",
+                    "Bash(git describe *)",
+                    "Bash(git blame *)",
+                    "Bash(git ls-files *)",
+                    "Bash(git config --get *)",
+                    "Bash(git config --list *)",
+                    "Bash(git shortlog *)",
+                    "Bash(git merge-base *)",
+                    "Bash(git cat-file *)",
+                    "Bash(git for-each-ref *)",
+                    "Bash(git grep *)",
+                    "Bash(git worktree list *)",
+                    "Bash(git reflog show *)",
+                    "Bash(git reflog)",
+                    "Bash(git rev-list *)",
+                    "Bash(git ls-remote *)",
+                    "Bash(git remote -v)",
+                    "Bash(git remote --verbose)",
+                    "Bash(git remote)",
+                    "Bash(gh pr view *)",
+                    "Bash(gh pr list *)",
+                    "Bash(gh pr diff *)",
+                    "Bash(gh pr checks *)",
+                    "Bash(gh pr status *)",
+                    "Bash(gh issue view *)",
+                    "Bash(gh issue list *)",
+                    "Bash(gh issue status *)",
+                    "Bash(gh run list *)",
+                    "Bash(gh run view *)",
+                    "Bash(gh repo view *)",
+                    "Bash(gh auth status)",
+                    "Bash(npm list *)",
+                    "Bash(bun pm ls *)",
+                    "Bash(npm view *)",
+                    "Bash(npm outdated *)",
+                    "Bash(pnpm list *)",
+                    "Bash(yarn list *)",
+                    "Bash(pip list *)",
+                    "Bash(pip show *)"
+                ],
+                "ask": [
+                    "Bash(curl *)",
+                    "Bash(wget *)",
+                    "Bash(aria2c *)",
+                    "Bash(axel *)",
+                    "Bash(rm -rf *)",
+                    "Bash(rm -r *)",
+                    "Bash(rm --recursive *)",
+                    "Bash(nc *)",
+                    "Bash(netcat *)",
+                    "Bash(telnet *)",
+                    "Bash(ncat *)"
+                ],
+                "deny": [
+                    "Read(./.env)",
+                    "Read(./.env.*)",
+                    "Bash(rm -rf /)",
+                    "Bash(rm -rf /*)",
+                    "Bash(sudo *)",
+                    "Bash(chmod 777 *)",
+                    "Bash(bash *)",
+                    "Bash(sh *)",
+                    "Bash(zsh *)",
+                    "Bash(fish *)",
+                    "Bash(dash *)",
+                    "Bash(eval *)",
+                    "Bash(source *)",
+                    "Bash(mkfs *)",
+                    "Bash(fdisk *)",
+                    "Bash(dd *)",
+                    "Bash(format *)",
+                    "Bash(parted *)",
+                    "Bash(open http*)",
+                    "Bash(open https*)",
+                    "Bash(xdg-open http*)",
+                    "Bash(xdg-open https*)"
+                ]
+            },
+            "permissionMode": "yolo",
+            "hooks": {
+                "enabled": false,
+                "defaultTimeout": 60,
+                "timeoutBehavior": "ignore",
+                "failureBehavior": "ignore",
+                "maxConcurrentHooks": 5,
+                "PreToolUse": [],
+                "PostToolUse": [],
+                "PostToolUseFailure": [],
+                "PermissionRequest": [],
+                "UserPromptSubmit": [],
+                "SessionStart": [],
+                "SessionEnd": [],
+                "Stop": [],
+                "SubagentStop": [],
+                "Notification": [],
+                "Compaction": []
+            },
+            "env": {},
+            "disableAllHooks": false,
+            "maxTurns": -1,
+            "outputFormat": "text",
+            "inputFormat": "text",
+            "print": false
+        },
+        "actions": {}
+    },
+    "focus": {
+        "currentFocus": "main-input",
+        "previousFocus": null,
+        "actions": {}
+    },
+    "command": {
+        "isProcessing": false,
+        "abortController": null,
+        "pendingCommands": [],
+        "actions": {}
+    },
+    "spec": {
+        "currentSpec": null,
+        "specPath": null,
+        "isActive": false,
+        "steeringContext": null,
+        "recentSpecs": [],
+        "isLoading": false,
+        "error": null,
+        "workspaceRoot": null,
+        "actions": {}
+    }
+}
+```
+
 ### Slice
 
 #### State
@@ -247,7 +784,9 @@
 
 ### Selector
 
-###
+### Registry
+
+SubagentRegistry
 
 ## Memory
 
@@ -452,13 +991,14 @@ export const globalOptions = {
 } satisfies Record<string, Options>;
 ```
 
-&#x20; &#x20;
-
 ## UI
 
 * User Interaction
+
   * onPaste
+
     * 文字
+
     * 图片
 
 ***
