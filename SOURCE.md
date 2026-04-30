@@ -1449,4 +1449,180 @@ main().catch((error) => {
   process.exit(1);
 });
 
+#!/usr/bin/env node
+
+/**
+ * Toggle Chrome DevTools Device Toolbar via DevTools Internal API
+ *
+ * 原理：
+ *   普通 CDP 命令（如 Emulation.setDeviceMetricsOverride）只能控制页面的运行时行为，
+ *   无法控制 DevTools UI 本身。但 DevTools 面板本身也是一个网页（devtools:// 协议），
+ *   拥有独立的 WebSocket 调试地址。通过连接到 DevTools 页面的 WebSocket，
+ *   我们可以用 Runtime.evaluate 在 DevTools 页面的 JavaScript 上下文中执行代码，
+ *   调用 DevTools 的内部 API 来切换 Device Toolbar。
+ *
+ * 关键 API：
+ *   - Emulation.AdvancedApp.instance().deviceModeView.toggleDeviceMode()
+ *   - Emulation.AdvancedApp.instance().deviceModeView.isDeviceModeOn()
+ *
+ * 使用方式：
+ *   1. 确保 Chrome 以 --remote-debugging-port=<port> --auto-open-devtools-for-tabs 启动
+ *   2. node scripts/toggle-device-toolbar.mjs [port]  (默认 port=9222)
+ *
+ * 前置依赖：
+ *   npm install ws  (或在 /tmp 目录下已安装)
+ */
+
+import http from 'node:http';
+
+const CDP_PORT = parseInt(process.argv[2] || '9222', 10);
+
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    http.get(url, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch (error) { reject(new Error(`Failed to parse JSON from ${url}: ${body}`)); }
+      });
+    }).on('error', reject);
+  });
+}
+
+function findDevToolsWebSocket(pages) {
+  const devtoolsPage = pages.find(page => page.url.startsWith('devtools://'));
+  if (!devtoolsPage) {
+    throw new Error(
+      'No DevTools page found. Make sure Chrome is started with --auto-open-devtools-for-tabs\n' +
+      'Available pages:\n' +
+      pages.map(p => `  - [${p.type}] ${p.title} (${p.url.substring(0, 80)})`).join('\n')
+    );
+  }
+  return devtoolsPage.webSocketDebuggerUrl;
+}
+
+async function toggleDeviceToolbar(webSocketUrl) {
+  // 动态导入 ws，支持从多个位置查找
+  let WebSocket;
+  try {
+    const ws = await import('ws');
+    WebSocket = ws.default || ws.WebSocket;
+  } catch {
+    console.error('Error: "ws" module not found. Install it with: npm install ws');
+    process.exit(1);
+  }
+
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(webSocketUrl);
+    const timeout = setTimeout(() => {
+      ws.close();
+      reject(new Error('WebSocket connection timed out'));
+    }, 10000);
+
+    ws.on('open', () => {
+      ws.send(JSON.stringify({
+        id: 1,
+        method: 'Runtime.evaluate',
+        params: {
+          expression: `(function() {
+            var app = Emulation.AdvancedApp.instance();
+            var deviceModeView = app.deviceModeView;
+            var wasPreviouslyOn = deviceModeView.isDeviceModeOn();
+            deviceModeView.toggleDeviceMode();
+            var isCurrentlyOn = deviceModeView.isDeviceModeOn();
+            return JSON.stringify({
+              wasOn: wasPreviouslyOn,
+              isNowOn: isCurrentlyOn,
+              action: wasPreviouslyOn ? 'turned OFF' : 'turned ON'
+            });
+          })()`,
+          returnByValue: true
+        }
+      }));
+    });
+
+    ws.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.id === 1) {
+        clearTimeout(timeout);
+        if (message.result?.result?.value) {
+          resolve(JSON.parse(message.result.result.value));
+        } else {
+          reject(new Error('Unexpected response: ' + JSON.stringify(message)));
+        }
+        ws.close();
+      }
+    });
+
+    ws.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+}
+
+async function checkDeviceMode(webSocketUrl) {
+  let WebSocket;
+  try {
+    const ws = await import('ws');
+    WebSocket = ws.default || ws.WebSocket;
+  } catch {
+    console.error('Error: "ws" module not found.');
+    process.exit(1);
+  }
+
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(webSocketUrl);
+    const timeout = setTimeout(() => { ws.close(); reject(new Error('Timeout')); }, 10000);
+
+    ws.on('open', () => {
+      ws.send(JSON.stringify({
+        id: 1,
+        method: 'Runtime.evaluate',
+        params: {
+          expression: `JSON.stringify({
+            isDeviceModeOn: Emulation.AdvancedApp.instance().deviceModeView.isDeviceModeOn()
+          })`,
+          returnByValue: true
+        }
+      }));
+    });
+
+    ws.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.id === 1) {
+        clearTimeout(timeout);
+        resolve(JSON.parse(message.result.result.value));
+        ws.close();
+      }
+    });
+
+    ws.on('error', (error) => { clearTimeout(timeout); reject(error); });
+  });
+}
+
+async function main() {
+  const subcommand = process.argv[3] || 'toggle';
+
+  console.log(`Connecting to Chrome on port ${CDP_PORT}...`);
+
+  const pages = await fetchJson(`http://localhost:${CDP_PORT}/json/list`);
+  const devToolsWebSocketUrl = findDevToolsWebSocket(pages);
+  console.log(`Found DevTools WebSocket: ${devToolsWebSocketUrl}`);
+
+  if (subcommand === 'status') {
+    const status = await checkDeviceMode(devToolsWebSocketUrl);
+    console.log(`Device Mode is currently: ${status.isDeviceModeOn ? 'ON' : 'OFF'}`);
+  } else {
+    const result = await toggleDeviceToolbar(devToolsWebSocketUrl);
+    console.log(`Device Toolbar ${result.action} (was: ${result.wasOn ? 'ON' : 'OFF'}, now: ${result.isNowOn ? 'ON' : 'OFF'})`);
+  }
+}
+
+main().catch((error) => {
+  console.error('Error:', error.message);
+  process.exit(1);
+});
+
 ```
