@@ -3,9 +3,7 @@
 ## Agent
 
 * Agent为什么要每次会话都生成一个新对话？
-
 * Agent 对象什么时候销毁？
-
 * 为什么要无状态？
 
 ### SubAgent
@@ -73,11 +71,8 @@
 ### **1. general-purpose — 通用万能 Agent**
 
 * **职责**：通用型 agent，用于**研究复杂问题、搜索代码、执行多步骤任务**
-
 * **工具**：`tools: []`，即拥有**所有工具**的访问权限
-
 * **使用场景**：当你搜索关键词/文件但不确定前几次能找到正确匹配时，交给它来执行搜索
-
 * **特点**：没有专门的 systemPrompt，是最灵活的 agent
 
 ***
@@ -85,23 +80,14 @@
 ### **2. Explore — 代码探索专家**
 
 * **职责**：**快速探索代码库**的专用 agent
-
 * **工具**：仅限 `Glob`、`Grep`、`Read`、`WebFetch`、`WebSearch`（只读工具，不能修改代码）
-
 * **使用场景**：
-
   * 按模式查找文件（如 `src/components/**/*.tsx`）
-
   * 按关键词搜索代码（如 "API endpoints"）
-
   * 回答关于代码库的问题（如 "API 端点是怎么工作的？"）
-
 * **特点**：有详细的 `systemPrompt`，定义了三个**搜索深度等级**：
-
   * **quick**：1-2 次 Glob，只看关键文件
-
   * **medium**：多种 Glob 模式 + Grep，读 5-10 个文件
-
   * **very thorough**：穷举式搜索，读所有相关文件
 
 ***
@@ -109,21 +95,13 @@
 ### **3. Plan — 架构规划师**
 
 * **职责**：**设计实现方案**的软件架构 agent
-
 * **工具**：`tools: []`，拥有**所有工具**（因为规划时可能需要探索代码库）
-
 * **使用场景**：需要为一个任务制定实现策略时
-
 * **特点**：有专门的 `systemPrompt`，输出格式固定为：
-
   * **Goal**（目标）
-
   * **Critical Files**（关键文件）
-
   * **Steps**（分步实现计划）
-
   * **Trade-offs**（架构权衡）
-
   * **Risks**（风险与缓解措施）
 
 ***
@@ -131,44 +109,30 @@
 ### **4. statusline-setup — 状态栏配置 Agent**
 
 * **职责**：专门用于**配置用户的 Claude Code 状态栏设置**
-
 * **工具**：仅限 `Read` 和 `Edit`（读取和编辑配置文件）
-
 * **使用场景**：用户需要配置状态栏显示时
-
 * **特点**：最简单的 agent，没有自定义 systemPrompt，功能很单一
 
 ### **5. verification — 独立验证工程师 🔍**
 
 * **职责**：在代码实现完成后，进行**独立的质量评估**，是代码上线前的"最后一道防线"
-
 * **工具**：`Read`、`Glob`、`Grep`、`Bash`（**严格只读，不能修改代码**）
-
 * **核心原则**：**只找问题，不修问题**。发现 bug 只报告，不尝试修复
 
 #### **验证流程分为 4 个阶段：**
 
 1. **Phase 1 — 项目配置检测**
-
    * 通过 Glob 找 `package.json`、`tsconfig.json`、`biome.json` 等配置文件
-
    * 识别包管理器（bun/npm/pnpm/yarn）、可用脚本、项目语言和框架
 2. **Phase 2 — 自动化检查**（通过 Bash 执行）
-
    * **类型检查**（`tsc --noEmit`）— 高优先级
-
    * **测试**（`bun run test:all`）— 高优先级
-
    * **Lint**（`biome check`）— 高优先级
-
    * **构建**（`bun run build`）— 中优先级
 3. **Phase 3 — 代码审查**
-
    * 通过 `git diff` 找到变更文件，逐一审查：
-
    * 逻辑错误、类型安全、错误处理、边界情况、安全问题、代码风格
 4. **Phase 4 — 对抗性分析**（像攻击者一样思考）
-
    * 输入验证、边界条件、并发竞态、依赖风险、回归风险
 
 ***
@@ -178,11 +142,8 @@
 > 首次启动时，初始化了哪些关键程序？扫描了哪些配置？
 
 1. 首次启动时，先检查是否存在新版本，如果存在新版本则弹窗让用户选择是否更新，直接打断后续流程
-
    * 先读当前agent 的版本，从 package.json中获取，获取不到版本号直接不比对了
-
    * 接着查找远程版本，优先读缓存\~/.blade/version-cache.json，如果没有缓存则从npm获取最新版本并写入缓存
-
      ```JSON
      {
          "latestVersion": "0.3.5",
@@ -190,12 +151,9 @@
          "skipUntilVersion": false
      }
      ```
-
    * 如果获取不到远程npmjs的最新版本，同样也跳过版本检查，否则通过 semver.gt 比较版本，如果存在新版本并且缓存中 skipUntilVersion 的值不为true，则弹窗
 2. 如果不存在新版本，或者用户完成更新，则在更新回调中初始化整个APP
-
    1. 初始化全局配置，这时候全局配置已经初始化完毕了，首次初始化在 yargs loadConfiguration 中间件中完成，这时候已经可以拿到完整的用户配置
-
       ```JSON
       {
           "currentModelId": "ooXJ71ZEiPC_ccXDjmEEh",
@@ -374,17 +332,11 @@
           "maxTurns": -1
       }
       ```
-
    2. 将命令行透传进来的 props 和全局 config 合并，如果同一个配置同时在配置文件配置和在命令行中传递，则命令行传递的参数具有更高的优先级
-
    3. 更新合并了命令行参数后的配置到全局  store
-
    4. 如果用户通过 --session-id 指定了会话ID, 则覆盖 store 中的默认的随机 ID, 详见 sessionSlice中 restoreSession 方法，/resume 指令用的也是同一个方法，但是指令相比命令行参数多恢复了UI消息和完整的会话消息
-
    5. 加载主题：如果用户配置了主题，则set 主题，ThemeManager只初始化一次，初始化时通过 Map 保存全部主题和ColorScheme
-
    6. 加载五个内置的子agent，每个子agent可以指定model属性（目前未兼容， 只为了兼容 cladue），如果未指定默认继承主agent的模型。加载子用户自定义子agent 配置, 首次扫描用户级别以及项目级别 .claude/agents, .balde/agents 下的子agent，扫描目录下所有md文件，使用 yaml formatter 解析 md 内容，一个子agent 必须包含 name 和 description 属性，否则放弃加载，一个标注的解析后的子agent 大概如下
-
       ```JSON
         {
             "name": "customer-support",
@@ -392,9 +344,7 @@
             "model": "haiku"
         }
       ```
-
       子agent markdown的主题内容作为系统提示词，一个完整的子agent 的配置包括
-
       ```TypeScript
       interface SubagentConfig {
         /** Subagent 唯一标识符 */
@@ -438,10 +388,27 @@
           | `plugin:${string}`;
       }
       ```
-
       最终返回全部子agent 的个数
+   7. 初始化 HookManager，加载用户配置，注意hook 的开关除了用户配置的开关外，还有更细颗粒度会话级别的开关，由 slash 指令 /slash enable, /slash disable 单独控制，如果用户开启了hook，执行SessionStart hook，SessionStart不需要matcher, 默认执行，遍历所有 SessionStart hook根据 hook type（command， promt， function， http） 分类执行。如果用户配置了promt 类型的 SessionStart hook 则该链路是最早初始化 ai sdk 的链路，初始化 ai service ，调用.chat 拿到大模型对话的结果，使用 zod 校验 json schema，判断大模型解析的结果，如果校验的结果是失败的，则收集错误信息。如果 SessionStart hook result 包含 env 对象，则遍历添加到 process.env上，如果有 SessionStart 警告，则打印警告信息
+   8. 发现并加载所有 skills ，初始化skills 注册表 Map\<skill name, SkillMetadata> 。确保用户级的 \~/.blade/skills目录存在。检查官方 skill 是否安装，如果没有安装则安装到用户目录，安装过程就是 execAsync('git --version')先检查git 是否存在，如果存在，则 调用 git clone 到临时目录，然后检查 \~/.blade/skills目录是否已经存在skill-creator这个目录，如果存在则清理掉，然后将临时目录克隆下来的skills拷贝到 全局 skill 目录
 
-   7. 初始化 HookManager，加载用户配置，注意hook 的开关除了用户配置的开关外，还有更细颗粒度会话级别的开关，由 slash 指令 /slash enable, /slash disable 单独控制，如果用户开启了hook，执行SessionStart hook，SessionStart不需要matcher, 默认执行，遍历所有 SessionStart hook根据 hook type（command， promt， function， http） 分类执行。
+```tsx
+const OFFICIAL_SKILLS_REPO = {
+  url: 'https://github.com/anthropics/skills.git',
+  branch: 'main',
+  // 默认安装的 Skills 列表
+  defaultSkills: ['skill-creator'],
+};
+```
+
+1. 加载内置 Skills（builtin）- 作为 fallback，会被外部同名 Skill 覆盖
+2. 扫描Claude Code 用户级 Skills（\~/.claude/skills/）
+3. 扫描Blade 用户级 Skills（\~/.blade/skills/）
+4. 扫描Claude Code 项目级 Skills（.claude/skills/）
+5. 扫描Blade 项目级 Skills（.blade/skills/）- 优先级最高
+6. 遍历所有的skills，将skill 添加到注册表
+7. 打印扫描到的 skills 个数和skill加载失败的错误信息，如果有
+8. 初始化自定义命令（发现并加载所有project 目录下 .blade/commands/ 和 .claude/commands/ 下的命令）
 
 ## Configuration Management
 
@@ -452,6 +419,524 @@
 ## Plugin
 
 ## Skills
+
+### SkillInstaller：
+
+单例模式
+
+### 两个内置 Skills
+
+skill-creator
+
+```tsx
+{
+  name: 'skill-creator',
+  description:
+    'Create new Skills interactively. Use when the user wants to create a new Skill, define a custom workflow, or add a specialized capability to Blade.',
+  allowedTools: ['Read', 'Write', 'Glob', 'Bash', 'AskUserQuestion'],
+  version: '1.0.0',
+  argumentHint: undefined,
+  userInvocable: true, // 允许用户通过 /skill-creator 调用
+  disableModelInvocation: false, // AI 可以自动调用
+  model: undefined,
+  whenToUse:
+    'User wants to create a new skill, define a custom workflow, or add a specialized capability.',
+  path: 'builtin://skill-creator',
+  basePath: '',
+  source: 'builtin',
+}
+```
+
+skill-creator 完整内容
+
+```txt
+# Skill Creator
+
+帮助用户创建新的 Blade Skills。
+
+## Instructions
+
+当用户想要创建新 Skill 时，按以下步骤进行：
+
+### 1. 了解需求
+
+询问用户：
+- Skill 的目的是什么？解决什么问题？
+- 什么场景下应该使用这个 Skill？
+- 需要访问哪些工具？（Read, Write, Bash, Grep, Glob, Task, WebFetch 等）
+- 是否需要支持用户通过 \`/skill-name\` 命令调用？
+
+### 2. 设计 Skill
+
+根据用户需求，设计以下内容：
+
+**必填字段：**
+- \`name\`: kebab-case 格式，≤64 字符（如 \`code-review\`, \`commit-helper\`）
+- \`description\`: 简洁描述，≤1024 字符，包含"什么"和"何时使用"
+
+**可选字段：**
+- \`allowed-tools\`: 限制可用工具列表（提高安全性）
+- \`argument-hint\`: 参数提示（如 \`<file_path>\`）
+- \`user-invocable\`: 是否支持 \`/skill-name\` 调用（默认 false）
+- \`disable-model-invocation\`: 是否禁止 AI 自动调用（默认 false）
+- \`version\`: 版本号
+
+**系统提示词设计要点：**
+- 清晰的任务描述
+- 具体的执行步骤
+- 边界条件和错误处理
+- 输出格式规范
+
+### 3. 确认保存位置
+
+询问用户希望将 Skill 保存到：
+- **项目级** (\`.blade/skills/\`): 与团队共享，通过 git 同步（**默认推荐**）
+- **用户级** (\`~/.blade/skills/\`): 个人使用，跨项目可用
+
+如果用户没有明确指定，默认使用 **项目级** (\`.blade/skills/\`)。
+
+### 4. 生成文件
+
+**重要：直接使用 Write 工具创建文件，不要使用外部脚本。**
+
+使用 Write 工具创建 SKILL.md 文件：
+
+\`\`\`
+.blade/skills/{name}/SKILL.md        # 项目级（默认）
+~/.blade/skills/{name}/SKILL.md      # 用户级
+\`\`\`
+
+文件格式：
+\`\`\`yaml
+---
+name: {name}
+description: {description}
+allowed-tools:
+  - {tool1}
+  - {tool2}
+user-invocable: true  # 如果需要 /skill-name 命令
+---
+
+# {Skill Title}
+
+## Instructions
+
+{详细指令}
+
+## Examples
+
+{使用示例}
+\`\`\`
+
+### 5. 刷新并验证
+
+创建完成后，**必须提示用户执行 \`/skills\` 命令刷新 Skills 列表**，否则新创建的 Skill 不会立即生效。
+
+验证步骤：
+- 检查目录和文件是否创建成功
+- **重要**：告诉用户执行 \`/skills\` 刷新列表
+- 提示用户可以通过以下方式使用新 Skill：
+  - AI 自动调用（如果未禁用）
+  - \`/skill-name\` 命令（如果启用了 user-invocable）
+
+## Best Practices
+
+1. **名称规范**
+   - 使用 kebab-case：\`code-review\`, \`commit-helper\`, \`test-generator\`
+   - 名称应该简洁且描述性强
+
+2. **描述要具体**
+   - 包含触发词，帮助 AI 识别何时使用
+   - 例如："Generate commit messages following conventional commits format. Use when the user wants to commit changes or asks for a commit message."
+
+3. **限制工具访问**
+   - 仅授予必要的工具权限，提高安全性
+   - 例如：只读 Skill 只需 Read, Grep, Glob
+
+4. **提供清晰的指令**
+   - 使用 Markdown 格式组织内容
+   - 包含具体步骤和示例
+   - 处理边界情况
+
+5. **考虑调用方式**
+   - 频繁使用的 Skill 可设置 \`user-invocable: true\`
+   - 仅限用户手动触发的 Skill 可设置 \`disable-model-invocation: true\`
+
+## Example Skills
+
+### 代码审查 Skill
+
+\`\`\`yaml
+---
+name: code-review
+description: Review code for best practices, bugs, and improvements. Use when reviewing PRs, checking code quality, or before committing.
+allowed-tools:
+  - Read
+  - Grep
+  - Glob
+argument-hint: <file_path>
+user-invocable: true
+---
+
+# Code Review
+
+审查代码质量、最佳实践和潜在问题。
+
+## Instructions
+
+1. 读取指定的文件或目录
+2. 检查以下方面：
+   - 代码风格一致性
+   - 潜在的 bug 或错误
+   - 性能问题
+   - 安全漏洞
+   - 可读性和可维护性
+3. 提供具体的改进建议
+
+## Output Format
+
+- 问题严重程度：[CRITICAL] 严重 | [WARN] 警告 | [INFO] 建议
+- 具体位置和代码片段
+- 改进建议和示例代码
+\`\`\`
+
+### 提交消息生成 Skill
+
+\`\`\`yaml
+---
+name: commit-message
+description: Generate conventional commit messages. Use when committing changes or when user asks for a commit message.
+allowed-tools:
+  - Bash
+  - Read
+user-invocable: true
+---
+
+# Commit Message Generator
+
+生成符合 Conventional Commits 规范的提交消息。
+
+## Instructions
+
+1. 运行 \`git diff --staged\` 查看暂存的更改
+2. 分析更改类型（feat/fix/docs/style/refactor/test/chore）
+3. 生成简洁的提交消息
+4. 询问用户是否满意或需要调整
+
+## Output Format
+
+\`\`\`
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+\`\`\`
+\`\`\`
+```
+
+update-config
+
+```tsx
+{
+  name: 'update-config',
+  description:
+    '配置 Blade harness（settings/hooks/permissions）。'
+    + '用户请求自动化行为时使用此 Skill。',
+  allowedTools: ['ConfigTool', 'Read', 'Bash', 'AskUserQuestion'],
+  version: '1.0.0',
+  userInvocable: true,
+  disableModelInvocation: false,
+  whenToUse:
+    '用户说"从现在起..."、"每次..."、"当...时..."、'
+    + '需要改配置、安装 hooks、修改权限',
+  path: 'builtin://update-config',
+  basePath: '',
+  source: 'builtin',
+}
+```
+
+update-config skill 完整内容
+
+```txt
+# Update Config Skill
+
+配置 Blade 运行环境。管理 settings、hooks、permissions、环境变量等。
+
+## 三层配置体系
+
+Blade 采用三层配置，优先级从低到高：
+
+| 层级 | 路径 | 用途 | scope 值 |
+|------|------|------|----------|
+| Global | \`~/.blade/config.json\` + \`~/.blade/settings.json\` | 用户全局默认 | \`global\` |
+| Project | \`.blade/settings.json\` | 项目级设置，提交到 git | \`project\` |
+| Local | \`.blade/settings.local.json\` | 本地覆盖，.gitignore | \`local\` |
+
+**选择原则：**
+- 个人偏好（theme, language, fontSize）→ \`global\`
+- 团队共享（hooks, permissions, env）→ \`project\`
+- 临时调试（debug, maxTurns）→ \`local\`
+
+## ConfigTool 使用
+
+### GET - 读取配置
+
+\`\`\`
+# 获取全部配置
+ConfigTool({ operation: "get", key: "*" })
+
+# 获取特定配置
+ConfigTool({ operation: "get", key: "hooks" })
+
+# 获取嵌套值
+ConfigTool({ operation: "get", key: "hooks.PreToolUse" })
+
+# 获取权限设置
+ConfigTool({ operation: "get", key: "permissions" })
+\`\`\`
+
+### SET - 设置配置
+
+\`\`\`
+# 设置温度
+ConfigTool({ operation: "set", key: "temperature", value: 0.7, scope: "global" })
+
+# 设置语言
+ConfigTool({ operation: "set", key: "language", value: "zh-CN", scope: "global" })
+
+# 设置最大轮次
+ConfigTool({ operation: "set", key: "maxTurns", value: 50, scope: "local" })
+
+# 启用调试
+ConfigTool({ operation: "set", key: "debug", value: true, scope: "local" })
+
+# 设置环境变量
+ConfigTool({ operation: "set", key: "env", value: { "NODE_ENV": "development" }, scope: "project" })
+\`\`\`
+
+### LIST - 列举可配置项
+
+\`\`\`
+ConfigTool({ operation: "list" })
+\`\`\`
+
+返回所有白名单配置项及其当前值。
+
+## 白名单字段
+
+以下字段可通过 ConfigTool SET 修改：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| temperature | number | 模型温度 |
+| maxContextTokens | number | 上下文窗口大小 |
+| maxOutputTokens | number | 输出 token 限制 |
+| timeout | number | HTTP 请求超时（毫秒）|
+| theme | string | 终端主题 |
+| uiTheme | string | Web UI 主题 |
+| language | string | 界面语言 |
+| fontSize | number | 字体大小 |
+| debug | boolean/string | 调试模式 |
+| autoSaveSessions | boolean | 自动保存会话 |
+| maxTurns | number | Agent 最大轮次 |
+| disableAllHooks | boolean | 禁用所有 hooks |
+| permissions | object | 权限规则 |
+| hooks | object | Hooks 配置 |
+| env | object | 环境变量 |
+| mcpServers | object | MCP 服务器配置 |
+
+**禁止修改的字段：** models、currentModelId（保护 API Key 安全）
+
+## Hooks 安装指南
+
+Hooks 是 Blade 的自动化机制，在特定事件发生时执行 shell 命令。
+
+### HookEvent 类型
+
+| 事件 | 触发时机 | 典型用途 |
+|------|----------|----------|
+| PreToolUse | 工具执行前 | 代码检查、格式化验证 |
+| PostToolUse | 工具执行后 | 自动运行 lint/test |
+| PostToolUseFailure | 工具执行失败后 | 错误日志 |
+| PermissionRequest | 权限请求时 | 自动批准/拒绝 |
+| UserPromptSubmit | 用户提交提示时 | 注入上下文 |
+| SessionStart | 会话启动时 | 环境初始化 |
+| SessionEnd | 会话结束时 | 清理操作 |
+| Stop | Agent 停止时 | 阻止过早停止 |
+| SubagentStop | 子 Agent 停止时 | 同上 |
+| Notification | 通知事件时 | 自定义通知 |
+| Compaction | 上下文压缩时 | 阻止压缩 |
+
+### HookMatcher 结构
+
+每个 HookMatcher 包含：
+- \`name\`（可选）: 名称，用于日志
+- \`matcher\`（可选）: 匹配器，不指定则匹配所有
+  - \`tools\`: 工具名匹配（支持字符串或数组，如 \`"Edit"\` 或 \`["Edit", "Write"]\`）
+  - \`paths\`: 文件路径匹配（glob 模式，如 \`"**/*.ts"\`）
+  - \`commands\`: 命令匹配（正则，如 \`"^git"\`）
+- \`hooks\`: Hook 列表
+
+### CommandHook 结构
+
+\`\`\`json
+{
+  "type": "command",
+  "command": "shell command to execute",
+  "timeout": 30,
+  "statusMessage": "Running check..."
+}
+\`\`\`
+
+Hook 接收 JSON 格式的输入通过 stdin，输出 JSON 到 stdout。
+
+### 完整安装示例
+
+**示例 1：安装 biome check 作为 PostToolUse hook**
+
+当 Edit 或 Write 工具修改 .ts/.tsx 文件后，自动运行 biome check：
+
+\`\`\`
+ConfigTool({
+  operation: "set",
+  key: "hooks",
+  value: {
+    "PostToolUse": [
+      {
+        "name": "biome-check",
+        "matcher": {
+          "tools": ["Edit", "Write"],
+          "paths": ["**/*.ts", "**/*.tsx"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "biome check --write $(echo $TOOL_INPUT | jq -r '.file_path // empty')",
+            "timeout": 30,
+            "statusMessage": "Running biome check..."
+          }
+        ]
+      }
+    ]
+  },
+  scope: "project"
+})
+\`\`\`
+
+**示例 2：安装 eslint 作为 PostToolUse hook**
+
+\`\`\`
+ConfigTool({
+  operation: "set",
+  key: "hooks",
+  value: {
+    "PostToolUse": [
+      {
+        "name": "eslint-fix",
+        "matcher": {
+          "tools": ["Edit", "Write"],
+          "paths": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+        },
+        "hooks": [
+          {
+            "type": "command",
+            "command": "eslint --fix $(echo $TOOL_INPUT | jq -r '.file_path // empty')",
+            "timeout": 30,
+            "statusMessage": "Running ESLint..."
+          }
+        ]
+      }
+    ]
+  },
+  scope: "project"
+})
+\`\`\`
+
+**示例 3：安装 SessionStart hook 打印环境信息**
+
+\`\`\`
+ConfigTool({
+  operation: "set",
+  key: "hooks",
+  value: {
+    "SessionStart": [
+      {
+        "name": "env-info",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Node:' $(node -v) '| Git branch:' $(git branch --show-current)",
+            "timeout": 10,
+            "statusMessage": "Gathering environment info..."
+          }
+        ]
+      }
+    ]
+  },
+  scope: "project"
+})
+\`\`\`
+
+**示例 4：设置权限白名单**
+
+\`\`\`
+ConfigTool({
+  operation: "set",
+  key: "permissions",
+  value: {
+    "allow": [
+      "Bash(git:*)",
+      "Bash(npm:*)",
+      "Bash(bun:*)",
+      "Read(**/*.ts)"
+    ],
+    "ask": [],
+    "deny": [
+      "Bash(rm -rf:*)"
+    ]
+  },
+  scope: "project"
+})
+\`\`\`
+
+## 自动行为关键词映射
+
+当用户使用以下关键词时，映射到对应的配置操作：
+
+| 用户说的 | 映射到 |
+|----------|--------|
+| "从现在起 lint 每个文件" | PostToolUse hook（Edit/Write 后运行 lint）|
+| "每次提交前运行测试" | PreToolUse hook（Bash git commit 前运行 test）|
+| "当编辑 TS 文件时检查类型" | PostToolUse hook（Edit 后运行 tsc）|
+| "允许所有 git 命令" | permissions.allow 添加 \`Bash(git:*)\` |
+| "设置调试模式" | debug = true |
+| "改成中文" | language = "zh-CN" |
+| "提高温度" | temperature 调整 |
+| "限制 50 轮" | maxTurns = 50 |
+| "禁用 hooks" | disableAllHooks = true |
+| "添加环境变量" | env 对象更新 |
+
+## 验证流程
+
+每次安装 hook 或修改配置后，**必须**验证：
+
+1. 用 \`ConfigTool({ operation: "get", key: "<modified-key>" })\` 确认值已生效
+2. 如果是 hooks，检查结构是否正确（包含 matcher 和 hooks 数组）
+3. 如果是 permissions，确认 allow/ask/deny 数组格式正确
+4. 告知用户配置已保存到哪个文件（根据 scope 判断）
+
+## 注意事项
+
+1. **hooks 字段使用 deep-merge 策略**：设置新的 hook 不会覆盖已有的 hook。但如果同一事件下设置新的 matcher 数组，会替换该事件的整个 matcher 列表
+2. **permissions 字段使用 replace 策略**：设置 permissions 会完全替换现有值。如果只想添加规则，先 GET 当前值，合并后再 SET
+3. **env 字段使用 deep-merge 策略**：可以逐个添加环境变量
+4. **scope 默认值**：不指定 scope 时，根据字段路由表决定（hooks/permissions/env 默认 local，temperature/theme 等默认 global）
+```
+
+
+
+
 
 ## Hooks
 
@@ -510,6 +995,60 @@ interface MatcherConfig {
 ```
 
 只有PreToolUse, PostToolUse,PermissionRequest,PostToolUseFailure 这四个钩子需要检查 matcher，其他的钩子默认允许执行
+
+### Hook Schemas
+
+zod 做json schema 的校验。定义大模型返回的各个Hook Respose 结果验证
+
+
+
+### SessionStart Hook
+
+#### prompt
+
+1. getOrCreateChatService，如果在这之前有其他的 promt hook 已经创建了 ai services, 则直接返回，否则创建一个新的chatService，并缓存
+2. 构建系统提示词
+3. 创建一个 AbortController，超过hook 设置的超时时间后，调用 .abort() 终止
+4. 调用 chatService.chat ，传入系统提示词和用户输入
+5. 系统返回的 hook 结果是这样
+
+```tsx
+{
+    "content": "{\n  \"decision\": {\n    \"behavior\": \"approve\"\n  },\n  \"systemMessage\": \"SessionStart event triggered, but no code changes were provided for review.\",\n  \"hookSpecificOutput\": {\n    \"additionalContext\": \"No code to review.\"\n  }\n}",
+    "reasoningContent": "1. **理解目标**：用户希望在 `SessionStart` 事件上触发一个 Hook，充当“代码质量评估器”。\n2. **分析输入**：\n    * 事件：`SessionStart`\n    * 输入数据：与 Hook 执行上下文相关的元数据（项目目录、会话 ID、权限模式等）。*此输入中未提供任何代码变更。*\n3. **根据约束条件进行评估**：\n    * 检查：安全漏洞、逻辑错误、类型安全问题。\n    * 输入限制：输入*仅*包含会话元数据。没有任何可供审查的代码、文件差异或特定的代码变更。\n4. **确定决策**：由于没有可供审查的代码，因此不存在明显的严重问题（安全漏洞、逻辑错误、类型安全问题）可供评估器检查和阻断。\n5. **构建输出**：决策应为 `\"approve\"`，因为没有任何需要阻断的内容。\n    * `decision`: `{ \"behavior\": \"approve\" }`\n    * `systemMessage`: \"没有可供审查的代码变更。会话已批准。\"\n    * `hookSpecificOutput`: `{ \"additionalContext\": \"没有可供审查的代码变更。\" }`\n6. **完善输出**：确保它是严格按照要求的原始 JSON 对象，不带任何 markdown 格式。",
+    "usage": {
+        "promptTokens": 320,
+        "completionTokens": 330,
+        "totalTokens": 650
+    },
+    "finishReason": "stop"
+}
+```
+
+```tsx
+[
+  { role: 'system', content: systemMessage },
+  { role: 'user', content: userMessage },
+],
+```
+
+1. 一个标准的用户输入大概长这样
+
+```txt
+"{\n  \"hook_event_name\": \"SessionStart\",\n  \"hook_execution_id\": \"CaaCuseJdYRAEUA83Fv0L\",\n  \"timestamp\": \"2026-04-29T06:40:13.274Z\",\n  \"project_dir\": \"/Users/jiangtianhong/wkspace/blade-code\",\n  \"session_id\": \"4gzkFTdDF4X4XZCBo4BUh\",\n  \"permission_mode\": \"yolo\",\n  \"is_resume\": false\n}"
+
+```
+
+```txt
+"你是一个代码质量评估器，作为 Hook 在 SessionStart 事件中被触发。\n\n## 评估指令\n审查此代码变更，重点检查：1) 安全漏洞（命令注入、XSS、SQL 注入、硬编码密钥/密码）2) 明显的逻辑错误（无限循环、off-by-one、空引用）3) 类型安全问题。如果发现严重问题，将问题描述放在 hookSpecificOutput.additionalContext 中。如果没有严重问题，返回 approve。\n\n## 输出格式\n必须返回一个 JSON 对象（不要包含任何其他文本）：\n{\n  \"decision\": { \"behavior\": \"approve\" | \"block\" },\n  \"systemMessage\": \"可选的说明信息\",\n  \"hookSpecificOutput\": { ... 根据事件类型返回相应字段 }\n}\n\n重要规则：\n- 只输出 JSON，不要包含 markdown 代码块或其他文本\n- 如果没有发现问题，使用 \"approve\"\n- 只在发现严重问题时使用 \"block\""
+
+```
+
+
+
+
+
+
 
 ## Spec Mode
 
@@ -788,7 +1327,85 @@ interface MatcherConfig {
 
 SubagentRegistry
 
+SkillRegistry 单例模式
+
+CustomCommandRegistry 单例模式
+
 ## Memory
+
+## Service
+
+### createChatServiceAsync:
+
+如果用户在模型配置中提供了 providerId。 providerId 选项包括 `anthropic`,  `openrouter`, `cerebras`, `vercel`, `zenmux` 则附加额外的请求 headers，和用户配置的 customHeaders。然后返回一个VercelAIChatService实例
+
+### VercelAIChatService：
+
+根据模型配置provider属性，创建不同的 sdk 实例，传入 name(provider)、ak、baseURL、headers。provider 得到一个 OpenAICompatibleProvider，最后传入模型名称得到一个大语言模型的实例。
+
+provider选项包括&#x20;
+
+* `openai`
+* `anthropic`&#x20;
+* `gemini`&#x20;
+* `azure-openai`
+* `deepseek`&#x20;
+* `openai-compatible`&#x20;
+
+```tsx
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { createAzure } from '@ai-sdk/azure';
+import { createDeepSeek } from '@ai-sdk/deepseek';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+```
+
+
+
+
+
+## Command
+
+\* 按优先级从低到高扫描目录，后面的命令覆盖前面的同名命令
+
+&#x20;  \* 优先级顺序（从低到高）:
+
+&#x20;  \* 1. \~/.blade/commands/ (用户级 Blade)
+
+&#x20;  \* 2. \~/.claude/commands/ (用户级 Claude Code 兼容)
+
+&#x20;  \* 3. .blade/commands/ (项目级 Blade)
+
+&#x20;  \* 4. .claude/commands/ (项目级 Claude Code 兼容)
+
+注意扫描的规则是遍历和递归查找 commands 目录下全部的 md文件，
+
+一个解析后的完整的 command大概是这样
+
+
+
+````tsx
+{
+    "name": "git.claude",
+    "namespace": null,
+    "config": {
+        "description": "Git 提交命令 - 自动生成符合 Conventional Commits 规范的提交信息",
+        "allowedTools": null,
+        "argumentHint": null,
+        "model": null,
+        "disableModelInvocation": false
+    },
+    "content": "# Git Commit Command\n\n当用户需要提交代码时，使用此命令生成符合 Conventional Commits 规范的提交信息。\n\n## 触发条件\n\n当用户请求以下操作时触发：\n- \"提交代码\"\n- \"commit\"\n- \"git commit\"\n- \"生成提交信息\"\n\n## 执行流程\n\n### 步骤 1：分析代码变更\n\n首先分析当前 Git 仓库中的代码变更：\n\n```bash\ngit status\ngit diff --staged\n```\n\n从变更中识别：\n- 修改了哪些文件\n- 变更的类型（新增功能、修复 bug、文档更新等）\n- 影响的范围（模块、功能点）\n\n### 步骤 2：确定提交类型 (type)\n\n根据代码变更的性质，选择合适的提交类型：\n\n| 类型 | 说明 | 示例场景 |\n|------|------|---------|\n| **feat** | 新功能 | 添加新功能、新页面、新组件 |\n| **fix** | 问题修复 | 修复 bug、错误处理 |\n| **docs** | 文档更新 | 修改 README、注释、技术文档 |\n| **style** | 代码格式 | 代码格式化、空格、缩进（不影响功能） |\n| **refactor** | 重构 | 代码重构、不改变功能的重写 |\n| **perf** | 性能优化 | 性能改进、加载优化 |\n| **test** | 测试相关 | 添加测试、修改测试用例 |\n| **chore** | 构建/工具 | 构建配置、依赖更新、工具脚本 |\n| **revert** | 回滚 | 回滚之前的提交 |\n\n**判断逻辑**：\n- 如果添加了新功能 → `feat`\n- 如果修复了 bug → `fix`\n- 如果只修改了文档 → `docs`\n- 如果只是代码格式调整 → `style`\n- 如果重构了代码但功能不变 → `refactor`\n- 如果优化了性能 → `perf`\n- 如果涉及测试 → `test`\n- 如果是构建/配置相关 → `chore`\n\n### 步骤 3：确定影响范围 (scope)\n\n根据变更的文件和模块，确定影响范围：\n\n**常见范围**：\n- 前端项目：`ui`、`components`、`utils`、`api`、`config`\n- 后端项目：`controller`、`service`、`dao`、`model`、`api`\n- 具体业务：`payment`、`user`、`order`、`auth` 等\n\n**判断逻辑**：\n- 查看变更的文件路径\n- 识别所属的模块或功能\n- 如果影响多个模块，使用最相关的模块名\n- 如果无法确定具体范围，可以省略\n\n### 步骤 4：编写主题 (subject)\n\n主题应该简明扼要地描述变更内容：\n\n**要求**：\n- 使用动词原形开头（添加、修复、更新等）\n- 不超过 50 个字符\n- 不以句号结尾\n- 使用中文描述\n\n**示例**：\n- ✅ \"添加用户登录功能\"\n- ✅ \"修复支付接口超时问题\"\n- ✅ \"更新组件库版本\"\n- ❌ \"添加用户登录功能。\"（不要句号）\n- ❌ \"Added user login feature\"（使用中文）\n\n### 步骤 5：编写正文 (body) [可选]\n\n对于复杂的变更，添加详细说明：\n\n**内容**：\n- 说明\"为什么\"要修改（动机）\n- 描述\"做了什么\"改变\n- 列出关键变更点\n\n**格式**：\n- 每行不超过 72 个字符\n- 使用列表列出关键变更\n- 使用中文描述\n\n**示例**：\n```\n- 新增支付宝支付方式\n- 添加支付结果回调处理\n- 更新支付状态管理逻辑\n- 优化支付超时处理\n```\n\n### 步骤 6：编写脚注 (footer) [可选]\n\n添加关联信息：\n\n**关联 Issue**：\n```\nCloses #123\nFixes #456\nRefs #789\n```\n\n**破坏性变更**：\n```\nBREAKING CHANGE: 修改了 API 接口格式，需要客户端同步更新\n```\n\n## 完整示例\n\n### 示例 1：新功能\n\n**场景**：添加了用户个人中心页面\n\n```\nfeat(user): 添加用户个人中心页面\n\n- 新增用户信息展示组件\n- 添加用户资料编辑功能\n- 实现头像上传功能\n- 添加表单验证\n\nCloses #123\n```\n\n### 示例 2：问题修复\n\n**场景**：修复了登录接口超时的问题\n\n```\nfix(auth): 修复登录接口超时问题\n\n修复用户在弱网环境下登录超时后无法重试的问题。\n增加重试机制和超时提示。\n\nFixes #456\n```\n\n### 示例 3：重构\n\n**场景**：重构了支付模块代码\n\n```\nrefactor(payment): 重构支付模块代码\n\n- 简化支付流程代码结构\n- 提取公共方法到 utils\n- 优化错误处理逻辑\n- 添加单元测试\n\n不改变现有功能，仅优化代码质量\n```\n\n### 示例 4：文档更新\n\n**场景**：更新了项目 README\n\n```\ndocs: 更新项目文档\n\n- 更新安装步骤说明\n- 添加使用示例\n- 修正文档中的错误\n```\n\n### 示例 5：性能优化\n\n**场景**：优化了首页加载速度\n\n```\nperf(home): 优化首页加载性能\n\n- 图片懒加载\n- 代码分割\n- 资源预加载\n- 缓存优化\n\n页面加载时间从 3s 降低到 1.5s\n```\n\n## 交互流程\n\n1. **检测变更**\n   - 运行 `git status` 和 `git diff --staged`\n   - 分析变更的文件和内容\n\n2. **确认类型**\n   - 根据变更内容自动判断提交类型\n   - 如果不确定，询问用户：\"这是什么类型的提交？（feat/fix/docs/refactor 等）\"\n\n3. **生成信息**\n   - 按照上述格式生成提交信息\n   - 向用户展示生成的信息\n\n4. **确认提交**\n   - 询问用户：\"确认使用此提交信息吗？\"\n   - 如果用户同意，执行 `git commit`\n   - 如果用户需要修改，根据反馈调整\n\n5. **执行提交**\n   ```bash\n   git commit -m \"<生成的提交信息>\"\n   ```\n\n## 分支命名规范\n\n在创建分支时，也需要遵循相应的命名规范：\n\n### 前端项目\n- 格式：`daily/x.x.x`\n- 示例：`daily/1.2.3`、`daily/2.0.0`\n\n### 后端项目\n- 新功能：`feature/<feature-name>`（如 `feature/user-api`）\n- 问题修复：`fix/<bug-name>`（如 `fix/payment-error`）\n- 紧急修复：`hotfix/<issue-name>`（如 `hotfix/security-patch`）\n- 重构：`refactor/<target>`（如 `refactor/payment-module`）\n\n### 禁止操作\n- ❌ 禁止在 `master`/`main` 分支直接开发\n- ❌ 所有开发工作必须在功能分支进行\n\n## 质量检查清单\n\n在生成提交信息前，确保：\n\n- [ ] 提交类型选择正确\n- [ ] 影响范围明确\n- [ ] 主题描述清晰（不超过 50 字符）\n- [ ] 主题使用中文、动词开头\n- [ ] 主题没有句号结尾\n- [ ] 正文详细说明了变更内容（如有）\n- [ ] 关联了相关 Issue（如有）\n- [ ] 标注了破坏性变更（如有）\n\n## 错误处理\n\n### 如果暂存区为空\n提示用户：\"没有检测到已暂存的更改，请先使用 `git add` 添加文件\"\n\n### 如果无法确定提交类型\n询问用户：\"请选择提交类型：\n1. feat - 新功能\n2. fix - 问题修复\n3. docs - 文档更新\n4. refactor - 重构\n5. 其他\"\n\n### 如果变更过于复杂\n建议用户：\"检测到大量文件变更，建议分批提交以保持清晰的提交历史\"\n\n## 最佳实践\n\n1. **原子性提交**：每次提交只做一件事\n2. **及时提交**：完成一个功能点就提交\n3. **清晰描述**：让其他人能理解\"为什么\"修改\n4. **避免过大**：不要在一次提交中混合不相关的变更\n5. **测试通过**：只提交经过测试的代码\n\n## 相关命令\n\n此命令与其他 Git 命令配合使用：\n- `git add` - 添加文件到暂存区\n- `git status` - 查看当前状态\n- `git diff` - 查看变更内容\n- `git log` - 查看提交历史\n- `git branch` - 管理分支\n\n## 技术实现\n\n此 Command 使用 Bash 工具执行 Git 命令：\n- 自动检测 Git 仓库状态\n- 分析代码变更内容\n- 智能判断提交类型\n- 生成分段格式的提交信息\n- 交互式确认和调整",
+    "path": "/Users/jiangtianhong/.claude/commands/git.claude.md",
+    "source": "user",
+    "sourceDir": "claude"
+}
+````
+
+
+
+
 
 ## Cli
 
@@ -994,11 +1611,8 @@ export const globalOptions = {
 ## UI
 
 * User Interaction
-
   * onPaste
-
     * 文字
-
     * 图片
 
 ***
@@ -1012,7 +1626,6 @@ export const globalOptions = {
 5. 上下文管理是怎么实现的
 
 restoreSession
-
 
 ```Typescript
 #!/usr/bin/env node
