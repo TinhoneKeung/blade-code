@@ -1012,3 +1012,441 @@ export const globalOptions = {
 5. 上下文管理是怎么实现的
 
 restoreSession
+
+
+```Typescript
+#!/usr/bin/env node
+
+/**
+ * mobile-debug.mjs — 一键启动移动端调试环境
+ *
+ * 全自动完成以下流程：
+ *   1. 启动 Chrome（带 --remote-debugging-port 和 --auto-open-devtools-for-tabs）
+ *   2. 等待 CDP 端口就绪
+ *   3. 用 playwright-cli attach 连接到 Chrome
+ *   4. 导航到目标 URL（默认 https://www.baidu.com）
+ *   5. 等待 docked DevTools 页面加载完成（由 --auto-open-devtools-for-tabs 自动打开）
+ *   6. 连接 docked DevTools 页面的 WebSocket，调用内部 API 切换 Device Toolbar
+ *
+ * 使用方式：
+ *   node scripts/mobile-debug.mjs [url] [options]
+ *
+ * 参数：
+ *   url              目标页面 URL（默认 https://www.baidu.com）
+ *   --port=<port>    Chrome 调试端口（默认 9222）
+ *   --user-data-dir  Chrome 用户数据目录（默认 ./chrome-debug-profile）
+ *   --no-device-toolbar  跳过 Device Toolbar 切换（仅打开页面）
+ *   --help           显示帮助信息
+ *
+ * 示例：
+ *   node scripts/mobile-debug.mjs
+ *   node scripts/mobile-debug.mjs https://www.google.com
+ *   node scripts/mobile-debug.mjs https://m.taobao.com --port=9333
+ *
+ * 前置依赖：
+ *   - Google Chrome（macOS）
+ *   - Node.js >= 18
+ *   - npm install ws（在 scripts/ 目录下）
+ *   - npx @playwright/cli（全局可用）
+ */
+
+import http from 'node:http';
+import { execSync, spawn } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const CHROME_PATH = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const DEFAULT_URL = 'https://www.baidu.com';
+const DEFAULT_PORT = 9222;
+const MAX_WAIT_RETRIES = 30;
+const WAIT_INTERVAL_MS = 1000;
+
+// ─── 参数解析 ───────────────────────────────────────────────────────────
+
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const config = {
+    url: DEFAULT_URL,
+    port: DEFAULT_PORT,
+    userDataDir: path.resolve(SCRIPT_DIR, '..', 'chrome-debug-profile'),
+    enableDeviceToolbar: true,
+    device: '',
+    help: false,
+  };
+
+  for (const arg of args) {
+    if (arg === '--help' || arg === '-h') {
+      config.help = true;
+    } else if (arg.startsWith('--port=')) {
+      config.port = parseInt(arg.split('=')[1], 10);
+    } else if (arg.startsWith('--user-data-dir=')) {
+      config.userDataDir = path.resolve(arg.split('=')[1]);
+    } else if (arg === '--no-device-toolbar') {
+      config.enableDeviceToolbar = false;
+    } else if (arg.startsWith('--device=')) {
+      config.device = arg.split('=').slice(1).join('=');
+    } else if (!arg.startsWith('--')) {
+      config.url = arg;
+    }
+  }
+
+  return config;
+}
+
+function printHelp() {
+  console.log(`
+mobile-debug.mjs — 一键启动移动端调试环境
+
+Usage:
+  node scripts/mobile-debug.mjs [url] [options]
+
+Arguments:
+  url                    目标页面 URL（默认 ${DEFAULT_URL}）
+
+Options:
+  --port=<port>          Chrome 调试端口（默认 ${DEFAULT_PORT}）
+  --device=<name>        模拟设备名称（默认选择第一个可用设备，如 "iPhone 14 Pro Max"）
+  --user-data-dir=<dir>  Chrome 用户数据目录（默认 ./chrome-debug-profile）
+  --no-device-toolbar    跳过 Device Toolbar 切换
+  --help, -h             显示帮助信息
+
+Examples:
+  node scripts/mobile-debug.mjs
+  node scripts/mobile-debug.mjs https://www.google.com
+  node scripts/mobile-debug.mjs https://m.taobao.com --port=9333
+  node scripts/mobile-debug.mjs https://www.baidu.com --device="iPhone 14 Pro Max"
+`);
+}
+
+// ─── 工具函数 ───────────────────────────────────────────────────────────
+
+function log(emoji, message) {
+  console.log(`${emoji}  ${message}`);
+}
+
+function fetchJson(url) {
+  return new Promise((resolve, reject) => {
+    http.get(url, (res) => {
+      let body = '';
+      res.on('data', (chunk) => body += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(body)); }
+        catch { reject(new Error(`Invalid JSON from ${url}`)); }
+      });
+    }).on('error', reject);
+  });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function runPlaywrightCli(args) {
+  const command = `npx playwright-cli ${args}`;
+  try {
+    return execSync(command, { encoding: 'utf-8', timeout: 30000 });
+  } catch (error) {
+    throw new Error(`playwright-cli failed: ${error.stderr || error.message}`);
+  }
+}
+
+async function loadWebSocket() {
+  try {
+    const ws = await import('ws');
+    return ws.default || ws.WebSocket;
+  } catch {
+    console.error('Error: "ws" module not found. Run: cd scripts && npm install ws');
+    process.exit(1);
+  }
+}
+
+function evaluateInDevTools(WebSocket, webSocketUrl, expression) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(webSocketUrl);
+    const timeout = setTimeout(() => { ws.close(); reject(new Error('Evaluate timed out')); }, 15000);
+
+    ws.on('open', () => {
+      ws.send(JSON.stringify({
+        id: 1,
+        method: 'Runtime.evaluate',
+        params: { expression, returnByValue: true }
+      }));
+    });
+
+    ws.on('message', (data) => {
+      const message = JSON.parse(data.toString());
+      if (message.id === 1) {
+        clearTimeout(timeout);
+        if (message.result?.result?.value) {
+          try { resolve(JSON.parse(message.result.result.value)); }
+          catch { resolve(message.result.result.value); }
+        } else {
+          reject(new Error('Unexpected evaluate response: ' + JSON.stringify(message)));
+        }
+        ws.close();
+      }
+    });
+
+    ws.on('error', (error) => { clearTimeout(timeout); reject(error); });
+  });
+}
+
+// ─── 步骤实现 ───────────────────────────────────────────────────────────
+
+function checkExistingChrome(port) {
+  return fetchJson(`http://localhost:${port}/json/version`)
+    .then(() => true)
+    .catch(() => false);
+}
+
+function launchChrome(port, userDataDir) {
+  log('🚀', `Launching Chrome on port ${port}...`);
+
+  const chromeProcess = spawn(CHROME_PATH, [
+    `--remote-debugging-port=${port}`,
+    '--auto-open-devtools-for-tabs',
+    `--user-data-dir=${userDataDir}`,
+  ], {
+    detached: true,
+    stdio: 'ignore',
+  });
+
+  chromeProcess.unref();
+  log('✅', `Chrome launched (PID: ${chromeProcess.pid})`);
+  return chromeProcess.pid;
+}
+
+async function waitForCdpReady(port) {
+  log('⏳', 'Waiting for CDP endpoint to be ready...');
+
+  for (let attempt = 0; attempt < MAX_WAIT_RETRIES; attempt++) {
+    try {
+      const version = await fetchJson(`http://localhost:${port}/json/version`);
+      log('✅', `CDP ready — Chrome ${version.Browser}`);
+      return version;
+    } catch {
+      await sleep(WAIT_INTERVAL_MS);
+    }
+  }
+
+  throw new Error(`CDP endpoint on port ${port} did not become ready within ${MAX_WAIT_RETRIES}s`);
+}
+
+function attachPlaywrightCli(port) {
+  log('🔗', `Attaching playwright-cli to http://localhost:${port}...`);
+  const output = runPlaywrightCli(`attach --cdp=http://localhost:${port}`);
+  log('✅', 'Attached to Chrome');
+  return output;
+}
+
+function navigateToUrl(url) {
+  log('🌐', `Navigating to ${url}...`);
+
+  // 先获取 tab 列表，找到非 chrome:// 的页面
+  const tabListOutput = runPlaywrightCli('tab-list');
+  const tabLines = tabListOutput.split('\n').filter(line => line.includes('- '));
+
+  // 找到第一个普通页面 tab（非 chrome:// 和 devtools://），或者用第一个 tab
+  let targetTabIndex = -1;
+  for (const line of tabLines) {
+    const match = line.match(/^- (\d+):/);
+    if (match && !line.includes('chrome://omnibox') && !line.includes('devtools://')) {
+      targetTabIndex = parseInt(match[1], 10);
+      break;
+    }
+  }
+
+  if (targetTabIndex === -1) {
+    // 所有 tab 都是 chrome:// 或 devtools://，选最后一个
+    const lastMatch = tabLines[tabLines.length - 1]?.match(/^- (\d+):/);
+    targetTabIndex = lastMatch ? parseInt(lastMatch[1], 10) : 0;
+  }
+
+  runPlaywrightCli(`tab-select ${targetTabIndex}`);
+  const output = runPlaywrightCli(`goto ${url}`);
+  log('✅', `Page loaded: ${url}`);
+  return output;
+}
+
+async function waitForDevToolsPage(port) {
+  log('⏳', 'Waiting for DevTools page to be ready...');
+
+  for (let attempt = 0; attempt < MAX_WAIT_RETRIES; attempt++) {
+    const pages = await fetchJson(`http://localhost:${port}/json/list`);
+    const devtoolsPage = pages.find(page =>
+      page.url.startsWith('devtools://') && page.url.includes('devtools_app.html')
+    );
+
+    if (devtoolsPage) {
+      log('✅', 'DevTools page is ready');
+      return devtoolsPage;
+    }
+
+    await sleep(WAIT_INTERVAL_MS);
+  }
+
+  throw new Error('DevTools page did not appear. Make sure Chrome was started with --auto-open-devtools-for-tabs');
+}
+
+async function findDevToolsWebSocket(port) {
+  const pages = await fetchJson(`http://localhost:${port}/json/list`);
+  const devtoolsPage = pages.find(page => page.url.startsWith('devtools://'));
+  if (!devtoolsPage) {
+    throw new Error('DevTools page not found in target list');
+  }
+  return devtoolsPage.webSocketDebuggerUrl;
+}
+
+async function toggleDeviceToolbar(port) {
+  log('📱', 'Toggling Device Toolbar...');
+
+  const WebSocket = await loadWebSocket();
+  const devToolsWsUrl = await findDevToolsWebSocket(port);
+
+  const result = await evaluateInDevTools(
+    WebSocket,
+    devToolsWsUrl,
+    `(function() {
+      var app = Emulation.AdvancedApp.instance();
+      var deviceModeView = app.deviceModeView;
+      var wasOn = deviceModeView.isDeviceModeOn();
+      if (!wasOn) {
+        deviceModeView.toggleDeviceMode();
+      }
+      var isNowOn = deviceModeView.isDeviceModeOn();
+      return JSON.stringify({ wasOn: wasOn, isNowOn: isNowOn });
+    })()`
+  );
+
+  if (result.isNowOn) {
+    log('✅', 'Device Toolbar is ON');
+  } else {
+    log('⚠️', `Device Toolbar toggle result: was=${result.wasOn}, now=${result.isNowOn}`);
+  }
+
+  return result;
+}
+
+async function selectMobileDevice(port, deviceName) {
+  log('📲', `Selecting device: ${deviceName || 'first available'}...`);
+
+  const WebSocket = await loadWebSocket();
+  const devToolsWsUrl = await findDevToolsWebSocket(port);
+
+  const result = await evaluateInDevTools(
+    WebSocket,
+    devToolsWsUrl,
+    `(function() {
+      var app = Emulation.AdvancedApp.instance();
+      var toolbar = app.deviceModeView.deviceModeView.toolbar;
+      var devices = toolbar.standardDevices();
+      var targetName = ${JSON.stringify(deviceName || '')};
+
+      var device;
+      if (targetName) {
+        device = devices.find(function(d) { return d.title === targetName; });
+        if (!device) {
+          return JSON.stringify({
+            error: 'Device not found: ' + targetName,
+            availableDevices: devices.map(function(d) { return d.title; })
+          });
+        }
+      } else {
+        device = devices[0];
+      }
+
+      toolbar.emulateDevice(device);
+
+      var model = app.deviceModeView.deviceModeView.model;
+      return JSON.stringify({
+        selectedDevice: device.title,
+        currentDevice: model.device() ? model.device().title : 'none',
+        currentType: model.type(),
+        availableDevices: devices.map(function(d) { return d.title; })
+      });
+    })()`
+  );
+
+  if (result.error) {
+    log('⚠️', result.error);
+    log('ℹ️', `Available devices: ${result.availableDevices.join(', ')}`);
+  } else {
+    log('✅', `Device selected: ${result.selectedDevice}`);
+  }
+
+  return result;
+}
+
+// ─── 主流程 ─────────────────────────────────────────────────────────────
+
+async function main() {
+  const config = parseArgs();
+
+  if (config.help) {
+    printHelp();
+    process.exit(0);
+  }
+
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════╗');
+  console.log('║       📱 Mobile Debug Environment Setup       ║');
+  console.log('╚═══════════════════════════════════════════════╝');
+  console.log('');
+
+  // Step 1: 检查是否已有 Chrome 实例
+  const alreadyRunning = await checkExistingChrome(config.port);
+  if (alreadyRunning) {
+    log('ℹ️', `Chrome already running on port ${config.port}, reusing...`);
+  } else {
+    // Step 2: 启动 Chrome
+    launchChrome(config.port, config.userDataDir);
+    // Step 3: 等待 CDP 就绪
+    await waitForCdpReady(config.port);
+  }
+
+  // Step 4: Attach playwright-cli
+  attachPlaywrightCli(config.port);
+
+  // Step 5: 导航到目标 URL
+  navigateToUrl(config.url);
+
+  // Step 6: 等待 DevTools 加载，然后切换 Device Toolbar 并选择设备
+  let selectedDeviceName = 'Desktop';
+  if (config.enableDeviceToolbar) {
+    await waitForDevToolsPage(config.port);
+    await toggleDeviceToolbar(config.port);
+    const deviceResult = await selectMobileDevice(config.port, config.device);
+    selectedDeviceName = deviceResult.selectedDevice || deviceResult.currentDevice || 'Unknown';
+
+    // Step 7: 刷新页面，让移动端样式正确渲染
+    log('🔄', 'Reloading page for mobile rendering...');
+    runPlaywrightCli('reload');
+    log('✅', 'Page reloaded');
+  }
+
+  console.log('');
+  console.log('╔═══════════════════════════════════════════════╗');
+  console.log('║              🎉 All Done!                     ║');
+  console.log('╠═══════════════════════════════════════════════╣');
+  console.log(`║  URL:    ${config.url.padEnd(37)}║`);
+  console.log(`║  Port:   ${String(config.port).padEnd(37)}║`);
+  console.log(`║  Device: ${selectedDeviceName.padEnd(37)}║`);
+  console.log('╚═══════════════════════════════════════════════╝');
+  console.log('');
+  console.log('Use playwright-cli to interact:');
+  console.log('  npx playwright-cli snapshot     # 获取页面快照');
+  console.log('  npx playwright-cli screenshot   # 截图');
+  console.log('  npx playwright-cli click <ref>  # 点击元素');
+  console.log('  npx playwright-cli goto <url>   # 导航');
+  console.log('  npx playwright-cli close        # 关闭浏览器');
+  console.log('');
+}
+
+main().catch((error) => {
+  console.error('');
+  console.error('❌ Error:', error.message);
+  process.exit(1);
+});
+
+```
